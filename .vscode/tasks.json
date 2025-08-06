@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build All C Files (Raylib)",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/c",
+        "gcc *.c -Iinclude -Llib -lraylib -lopengl32 -lgdi32 -lwinmm -o game.exe && game.exe"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    }
+  ]
+}
