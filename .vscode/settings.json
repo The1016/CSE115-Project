@@ -61,5 +61,6 @@
     "stdarg.h": "c",
     "stdio.h": "c",
     "fonts.h": "c"
-  }
+  },
+  "C_Cpp.errorSquiggles": "disabled"
 }
