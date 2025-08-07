@@ -4,6 +4,9 @@
 #include "raylib.h" 
 
 extern bool debugMode; // Global debug mode flag
+  
+
+
 
 void sandBox();
 

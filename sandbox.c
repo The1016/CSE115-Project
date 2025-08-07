@@ -4,6 +4,11 @@
 #include "sandbox.h"
 #include "phy.h"
 
+
+#define grav 0.5f // Gravity constant
+#define jump_velocity -10.0f // Jump velocity
+#define max_jumptime 0.25f // Maximum time for jump hold
+
 // Global debug mode flag
 bool debugMode = false;
 bool debugMode; // Global debug mode flag
@@ -49,16 +54,22 @@ void sandBox() {
         
         Rectangle platform[] = {floor};
         //physics
-        applyGravity(&player, 0.5f);
+        handleDash(&player); 
+        handleJump(&player); 
+        applyGravity(&player, grav);
         updateEntity(&player, platform, 1);
 
 
         // Movement
-        if (IsKeyDown(KEY_D))player.hitbox.x += speed;
-        if (IsKeyDown(KEY_A))player.hitbox.x -= speed;
-        if (IsKeyDown(KEY_S))player.hitbox.y += speed;
-        if (IsKeyDown(KEY_SPACE))player.hitbox.y -= speed;
+        // Regular movement only if not dashing
+        if (!player.isDashing) {
+            player.velocity.x = 0; // Reset before applying input
+            if (IsKeyDown(KEY_D)) player.velocity.x += speed;
+            if (IsKeyDown(KEY_A)) player.velocity.x -= speed;
+        }
 
+        // Apply movement
+        player.hitbox.x += player.velocity.x;
         // Camera follows player
         camera.target = (Vector2){ player.hitbox.x + player.hitbox.width/2, player.hitbox.y + player.hitbox.height/2 };
 
