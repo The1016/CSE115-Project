@@ -4,16 +4,32 @@
     {
       "label": "Build All C Files (Raylib)",
       "type": "shell",
-      "command": "cmd.exe",
+      "command": "gcc",
       "args": [
-        "/c",
-        "gcc *.c -Iinclude -Llib -lraylib -lopengl32 -lgdi32 -lwinmm -o game.exe && game.exe"
+        "*.c",
+        "-Iinclude",
+        "-Llib",
+        "-lraylib",
+        "-lopengl32",
+        "-lgdi32",
+        "-lwinmm",
+        "-o",
+        "game.exe"
       ],
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Run Game",
+      "type": "shell",
+      "command": "game.exe",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
     }
   ]
 }
