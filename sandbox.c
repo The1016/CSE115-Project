@@ -45,15 +45,21 @@ void sandBox() {
 
         Rectangle platforms[] = { floor };
 
-        // Player movement input
-        player.velocity.x = 0;
-        if (IsKeyDown(KEY_D)) player.velocity.x = speed;
-        if (IsKeyDown(KEY_A)) player.velocity.x = -speed;
-
-        if (IsKeyDown(KEY_SPACE) && player.onGround) {
-            player.velocity.y = -10; // jump
+        // Movement
+        // Regular movement only if not dashing
+        if (!player.isDashing) {
+            player.velocity.x = 0; // Reset before applying input
+            if (IsKeyDown(KEY_D)) player.velocity.x += speed;
+            if (IsKeyDown(KEY_A)) player.velocity.x -= speed;
         }
 
+        // Apply movement
+        player.hitbox.x += player.velocity.x;
+
+
+        //Physics
+        handleDash(&player);
+        handleJump(&player);
         applyGravity(&player, 0.5f);
         updateEntity(&player, platforms, 1);
 
