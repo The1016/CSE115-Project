@@ -3,6 +3,7 @@
 #include "menu.h"
 #include "sandbox.h"
 #include "phy.h"
+#include "gun.h"
 
 bool debugMode = false;
 
@@ -26,6 +27,8 @@ void sandBox() {
         .velocity = { 0, 0 },
         .onGround = false
     };
+     Bullet bullets[MAX_BULLETS];
+    InitBullets(bullets, MAX_BULLETS);
 
     Camera2D camera = { 0 };
     camera.target = (Vector2){ player.hitbox.x + player.hitbox.width / 2, player.hitbox.y + player.hitbox.height / 2 };
@@ -52,6 +55,14 @@ void sandBox() {
             if (IsKeyDown(KEY_D)) player.velocity.x += speed;
             if (IsKeyDown(KEY_A)) player.velocity.x -= speed;
         }
+         if (IsKeyPressed(KEY_M)) {
+        Vector2 startPos = {
+        player.hitbox.x + player.hitbox.width,
+        player.hitbox.y + player.hitbox.height / 2
+        };
+        Vector2 dir = { 10, 0 };  // Move to the right
+        ShootBullet(bullets, startPos, dir);
+        }
 
         // Apply movement
         player.hitbox.x += player.velocity.x;
@@ -62,6 +73,8 @@ void sandBox() {
         handleJump(&player);
         applyGravity(&player, 0.5f);
         updateEntity(&player, platforms, 1);
+        UpdateBullets(bullets, MAX_BULLETS);
+
 
         // Enemy movement
         updateEnemy(&enemy, &player, platforms, 1, speed - 2, 5.0f);
@@ -78,6 +91,8 @@ void sandBox() {
         DrawRectangleRec(floor, BLACK);
         DrawRectangleRec(player.hitbox, RAYWHITE);
         DrawRectangleRec(enemy.hitbox, RED);
+        DrawBullets(bullets, MAX_BULLETS);
+
 
         if (debugMode) {
             DrawRectangleLines(player.hitbox.x, player.hitbox.y, player.hitbox.width, player.hitbox.height, BLUE);
