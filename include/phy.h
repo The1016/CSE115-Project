@@ -3,10 +3,15 @@
 
 #include "raylib.h"
 
+
+
+typedef struct  {
+    Rectangle hitbox;      // Entity's hitbox for collision detection
+    Vector2 velocity;   
+    bool onGround;       // Flag to check if the entity is on the ground
+} Entity;
 typedef struct {
-    Rectangle hitbox;
-    Vector2 velocity;
-    bool onGround;
+    Entity base; // Inherit from Entity
     bool isJumping; // Flag to check if the player is jumping
     float jumpTime; // Time the jump has been held
     float coyoteTimer;
@@ -15,10 +20,12 @@ typedef struct {
     float dashTime;
     float dashCooldown;
     int dashDirection;  
-} Entity;
+    float iFrames;
+    float knkbackTime;
+    float health;
+} Player;
 typedef struct {
-    Rectangle hitbox;
-    Vector2 velocity;
+    Entity base;
     bool active;
     float speed;
     int health;
@@ -27,16 +34,17 @@ typedef struct {
 
     bool attacking;  // 👈 ADD THIS
 } Enemy;
-void handleJump(Entity *entity);
-void handleDash(Entity *entity);
+void handleJump(Player *entity);
+void handleDash(Player *entity);
 
 
 // Player and general object logic
-void applyGravity(Entity *entity, float gravity);
-void updateEntity(Entity *player, Rectangle *floor, int platformCount);
+void applyGravity(Entity *entity, float gravity,float gravityscale);
+void updateEntity(Entity *player, Rectangle *floor, int platformCount,float ignoreHorizontalCollision);
+void updatePlayer(Player *player, Enemy *enemy);
 
 // Enemy-specific logic
-void updateEnemy(Entity *enemy, Entity *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);
-
+void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);
+void resolveEntityCollision(Player *player, Enemy *enemy);
 
 #endif

@@ -1,6 +1,6 @@
 #include "phy.h"
 #include <math.h>  // For fabs
-
+#include "sandbox.h"
 
 #define jump_velocity -10.0f // Jump velocity
 #define max_jumptime 0.35f // Maximum time for jump hold
@@ -9,22 +9,21 @@
 #define DASH_DURATION 0.2f
 #define DASH_SPEED 15.0f
 #define DASH_COOLDOWN 0.4f
+#define KNOCKBACK_FORCE_X 13.0f   // Horizontal push speed
+#define KNOCKBACK_FORCE_Y -7.0f  // Upward bounce (negative = up)
+#define IFRAME_TIME 0.5f  // seconds
+
+float playerInvincibleTime = 0.1f;
 
 
-void applyGravity(Entity *entity, float gravity){
-    if(!entity->onGround) { 
-        if(entity->isJumping) {
-        entity->velocity.y += gravity * 0.3f; // lighter gravity when jumping
-        }else{
-            entity->velocity.y += gravity*1.5f; // normal gravity
-        }
-    } 
+void applyGravity(Entity *entity, float gravity, float gravityscale) {
+    entity->velocity.y += gravity * gravityscale; // Apply gravity
 }
-void handleJump(Entity *entity) {
+void handleJump(Player *entity) {
     float dt = GetFrameTime();
 
     // Update timers
-    if (entity->onGround) {
+    if (entity->base.onGround) {
         entity->coyoteTimer = COYOTE_TIME;  // Reset when grounded
     } else {
         entity->coyoteTimer -= dt;
@@ -40,8 +39,8 @@ void handleJump(Entity *entity) {
     if (entity->jumpBufferTimer > 0 && entity->coyoteTimer > 0) {
         entity->isJumping = true;
         entity->jumpTime = 0.0f;
-        entity->velocity.y = jump_velocity;
-        entity->onGround = false;
+        entity->base.velocity.y = jump_velocity;
+        entity->base.onGround = false;
 
         // Reset buffer so it doesn’t trigger multiple times
         entity->jumpBufferTimer = 0.0f;
@@ -55,9 +54,15 @@ void handleJump(Entity *entity) {
             entity->isJumping = false;
         }
     }
+
+    float gravityScale = (entity->isJumping && entity->base.velocity.y < 0)
+                         ? 0.3f
+                         : 1.5f;
+
+    applyGravity( &entity->base, CONST_GRAVITY, gravityScale);
 }
 
-void handleDash(Entity *entity) {
+void handleDash(Player *entity) {
     float dt = GetFrameTime();
 
     if(entity -> dashCooldown > 0.0f){
@@ -79,36 +84,92 @@ void handleDash(Entity *entity) {
     }
     if(entity->isDashing) {
         entity->dashTime += dt;
-        entity->velocity.x = entity->dashDirection * DASH_SPEED; // Apply dash speed   
+        entity->base.velocity.x = entity->dashDirection * DASH_SPEED; // Apply dash speed   
         if(entity->dashTime >= DASH_DURATION) {
             entity->isDashing = false; // End dash
-            entity->velocity.x = 0; // Reset velocity after dash
+            entity->base.velocity.x = 0; // Reset velocity after dash
         }
     }
 }
 
 
-void updateEnemy(Entity *enemy, Entity *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold) {
-    float distanceX = player->hitbox.x - enemy->hitbox.x;
+void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold) {
+    float distanceX = player->base.hitbox.x - enemy->base.hitbox.x;
 
     // Horizontal movement toward player
     if (fabs(distanceX) > chaseThreshold) {
-        enemy->velocity.x = (distanceX > 0) ? chaseSpeed : -chaseSpeed;
+        enemy->base.velocity.x = (distanceX > 0) ? chaseSpeed : -chaseSpeed;
     } else {
-        enemy->velocity.x = 0;
+        enemy->base.velocity.x = 0;
     }
 
-    applyGravity(enemy, 0.5f);
-    updateEntity(enemy, platforms, platformCount);
+    applyGravity(&enemy->base, 0.5f, 1);
+    updateEntity(&enemy->base, platforms, platformCount, 0.0f);
 
-    // Stop overlapping player horizontally
-    if (CheckCollisionRecs(player->hitbox, enemy->hitbox)) {
-        if (enemy->velocity.x > 0) {
-            enemy->hitbox.x = player->hitbox.x - enemy->hitbox.width;
-        } else if (enemy->velocity.x < 0) {
-            enemy->hitbox.x = player->hitbox.x + player->hitbox.width;
+    // Stop overlapping vertically
+    if (CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
+    // Player lands on top of enemy
+    if (player->base.velocity.y > 0 &&
+        player->base.hitbox.y + player->base.hitbox.height - enemy->base.hitbox.y < 10) {
+        
+        player->base.hitbox.y = enemy->base.hitbox.y - player->base.hitbox.height;
+        player->base.velocity.y = 0;
+        player->base.onGround = true;
+    }
+    // Enemy lands on top of player
+    else if (enemy->base.velocity.y > 0 &&
+             enemy->base.hitbox.y + enemy->base.hitbox.height - player->base.hitbox.y < 10) {
+        
+        enemy->base.hitbox.y = player->base.hitbox.y - enemy->base.hitbox.height;
+        enemy->base.velocity.y = 0;
+        enemy->base.onGround = true;
+    }
+}
+}
+
+void updatePlayer(Player *player, Enemy *enemy) {
+    float dt = GetFrameTime();
+
+    // decrement timers
+    if (player->iFrames > 0.0f) player->iFrames -= dt;
+    if (player->knkbackTime  > 0.0f) player->knkbackTime  -= dt;
+
+    // detect hit (only if not invincible)
+    if (player->iFrames <= 0.0f && CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
+        // knock direction: away from enemy
+        float knockDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
+
+        // apply knockback velocities
+        player->base.velocity.x = knockDir * 9.0f;  // tune horizontal KB strength
+        player->base.velocity.y = -9.0f;            // tune vertical bounce
+
+        // timers
+        player->iFrames = 1.0f;  // 1s of i-frames (tweak)
+        player->knkbackTime  = 0.18f; // how long horizontal KB persists (tweak)
+
+        // make sure player isn't considered grounded
+        player->base.onGround = false;
+    }
+}
+
+void resolveEntityCollision(Player *player, Enemy *enemy) {
+    if (CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
+        // Only trigger if not invincible
+        if (player->iFrames <= 0.0f) {
+            player->health--;
+            player->iFrames = IFRAME_TIME;      // invulnerability time
+            player->knkbackTime = 0.2f;         // time during which control is disabled
+
+            // Determine knockback direction (away from enemy)
+            float knockDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
+
+            // Apply knockback
+            player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
+            player->base.velocity.y = KNOCKBACK_FORCE_Y;
+
+            // Ensure player is considered airborne
+            player->base.onGround = false;
         }
-        enemy->velocity.x = 0;
     }
 }
 
@@ -117,9 +178,20 @@ void updateEnemy(Entity *enemy, Entity *player, Rectangle *platforms, int platfo
 
 
 
-void updateEntity(Entity *entity, Rectangle *platforms, int platformCount) {
-    // Move horizontally
-    entity->hitbox.x += entity->velocity.x;
+
+
+
+void updateEntity(Entity *entity, Rectangle *platforms, int platformCount, float ignoreKnockbackTime) {
+    // Only apply player-controlled horizontal movement if not in knockback
+    if (ignoreKnockbackTime <= 0.0f) {
+        entity->hitbox.x += entity->velocity.x;
+    } else {
+        // Knockback in progress, still apply velocity but no control override
+        entity->hitbox.x += entity->velocity.x;
+    }
+
+    // --- Collision logic stays the same ---
+    // (horizontal collision)
     for (int i = 0; i < platformCount; i++) {
         if (CheckCollisionRecs(entity->hitbox, platforms[i])) {
             if (entity->velocity.x > 0)
@@ -130,7 +202,7 @@ void updateEntity(Entity *entity, Rectangle *platforms, int platformCount) {
         }
     }
 
-    // Move vertically
+    // (vertical movement)
     entity->hitbox.y += entity->velocity.y;
     entity->onGround = false;
     for (int i = 0; i < platformCount; i++) {
@@ -145,3 +217,4 @@ void updateEntity(Entity *entity, Rectangle *platforms, int platformCount) {
         }
     }
 }
+
