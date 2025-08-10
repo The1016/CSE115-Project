@@ -22,7 +22,10 @@ typedef struct {
     int dashDirection;  
     float iFrames;
     float knkbackTime;
+    float maxHealth;
     float health;
+    float deathTimer;
+    bool isAlive;
 } Player;
 typedef struct {
     Entity base;
@@ -41,7 +44,7 @@ void handleDash(Player *entity);
 // Player and general object logic
 void applyGravity(Entity *entity, float gravity,float gravityscale);
 void updateEntity(Entity *player, Rectangle *floor, int platformCount,float ignoreHorizontalCollision);
-void updatePlayer(Player *player, Enemy *enemy);
+void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms);
 
 // Enemy-specific logic
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);

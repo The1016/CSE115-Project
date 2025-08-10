@@ -94,6 +94,14 @@ void handleDash(Player *entity) {
 
 
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold) {
+    // If player is dead, enemy just stops moving
+    if (!player->isAlive) {
+        enemy->base.velocity.x = 0;
+        applyGravity(&enemy->base, 0.5f, 1);
+        updateEntity(&enemy->base, platforms, platformCount, 0.0f);
+        return;
+    }
+
     float distanceX = player->base.hitbox.x - enemy->base.hitbox.x;
 
     // Horizontal movement toward player
@@ -127,54 +135,56 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
 }
 }
 
-void updatePlayer(Player *player, Enemy *enemy) {
+void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     float dt = GetFrameTime();
 
-    // decrement timers
+    // Timers
     if (player->iFrames > 0.0f) player->iFrames -= dt;
-    if (player->knkbackTime  > 0.0f) player->knkbackTime  -= dt;
+    if (player->knkbackTime > 0.0f) player->knkbackTime -= dt;
 
-    // detect hit (only if not invincible)
-    if (player->iFrames <= 0.0f && CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
-        // knock direction: away from enemy
-        float knockDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
-
-        // apply knockback velocities
-        player->base.velocity.x = knockDir * 9.0f;  // tune horizontal KB strength
-        player->base.velocity.y = -9.0f;            // tune vertical bounce
-
-        // timers
-        player->iFrames = 1.0f;  // 1s of i-frames (tweak)
-        player->knkbackTime  = 0.18f; // how long horizontal KB persists (tweak)
-
-        // make sure player isn't considered grounded
-        player->base.onGround = false;
+    // Death state
+    if (!player->isAlive) {
+        player->deathTimer += dt;
+        return;
     }
-}
 
-void resolveEntityCollision(Player *player, Enemy *enemy) {
-    if (CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
-        // Only trigger if not invincible
+    // Movement & physics
+    handleDash(player);
+    handleJump(player);
+    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);
+
+    // Enemy collision & damage
+    if (enemy && CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
         if (player->iFrames <= 0.0f) {
+            // Take damage
             player->health--;
-            player->iFrames = IFRAME_TIME;      // invulnerability time
-            player->knkbackTime = 0.2f;         // time during which control is disabled
+            player->iFrames = IFRAME_TIME;
+            player->knkbackTime = 0.2f;
 
-            // Determine knockback direction (away from enemy)
+            // Knockback
             float knockDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
-
-            // Apply knockback
             player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
             player->base.velocity.y = KNOCKBACK_FORCE_Y;
-
-            // Ensure player is considered airborne
             player->base.onGround = false;
+
+            // Death check
+            if (player->health <= 0) {
+                player->isAlive = false;
+                player->deathTimer = 0.0f;
+            }
+        }
+
+        // Push apart (no damage if in iFrames)
+        float overlapX = (player->base.hitbox.x + player->base.hitbox.width / 2) -
+                         (enemy->base.hitbox.x + enemy->base.hitbox.width / 2);
+        float pushDist = (player->base.hitbox.width / 2 + enemy->base.hitbox.width / 2) - fabs(overlapX);
+        if (pushDist > 0) {
+            float pushDir = (overlapX > 0) ? 1.0f : -1.0f;
+            player->base.hitbox.x += pushDir * (pushDist / 2.0f);
+            enemy->base.hitbox.x -= pushDir * (pushDist / 2.0f);
         }
     }
 }
-
-
-
 
 
 

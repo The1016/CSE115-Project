@@ -32,6 +32,10 @@ void sandBox() {
         
 
     Player player = {0}; // zero everything
+    player.maxHealth = 3;
+    player.health = player.maxHealth;
+    player.isAlive = true;
+    player.deathTimer = 0.0f;
 
     player.base.hitbox = (Rectangle){ screenWidth / 2.0f - 25, screenHeight / 2.0f - 25, 35, 60 };
     player.base.velocity = (Vector2){ 0, 0 };
@@ -98,18 +102,14 @@ void sandBox() {
 
 
         // Physics
-        handleDash(&player);
-        handleJump(&player);
-        updateEntity(&player.base, platforms, 1 + SMALL_PLATFORM_COUNT, player.knkbackTime);
+        updatePlayer(&player, &enemy, platforms);
         updateEnemy(&enemy, &player, platforms, 1, speed - 2, 5.0f);
 
         // Handle player–enemy collision
-        resolveEntityCollision(&player, &enemy);
+        
 
         // Reduce timers
         float dt = GetFrameTime();
-        if (player.iFrames > 0) player.iFrames -= dt;
-        if (player.knkbackTime > 0) player.knkbackTime -= dt;
 
         // If knockback active, reduce timer
         if (player.knkbackTime > 0) {
@@ -143,7 +143,13 @@ void sandBox() {
         for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
         DrawRectangleRec(smallPlatforms[i], PURPLE);
         }
-        DrawRectangleRec(player.base.hitbox, RAYWHITE);
+        if (!player.isAlive) {
+            float alpha = 1.0f - (player.deathTimer / 2.0f); // Fade out in 2 seconds
+            if (alpha < 0) alpha = 0;
+            DrawRectangleRec(player.base.hitbox, Fade(RAYWHITE, alpha));
+        } else {
+            DrawRectangleRec(player.base.hitbox, RAYWHITE);
+        }
         DrawRectangleRec(enemy.base.hitbox, RED);
         DrawBullets(bullets, MAX_BULLETS);
 
@@ -161,10 +167,18 @@ void sandBox() {
             }
         }
         }
+        if (!player.isAlive && player.deathTimer >= 2.0f) {
+            currentScreen = SCREEN_MAIN_MENU; // After 2s fade
+            TraceLog(LOG_INFO, "Player death animation done - returning to main menu");
+        }
 
         EndMode2D();
+        // Draw health UI
+        for (int i = 0; i < player.maxHealth; i++) {
+            Color heartColor = (i < player.health) ? RED : DARKGRAY;
+            DrawRectangle(20 + i * 40, 20, 30, 30, heartColor);
+        }
 
-        DrawText("Press ESC to return to menu", 20, 20, 20, WHITE);
         EndDrawing();
     }
 }
