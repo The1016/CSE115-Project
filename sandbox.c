@@ -18,6 +18,8 @@ float CONST_GRAVITY = 0.5f;
 Rectangle *smallPlatforms;
 Bullet bullets[MAX_BULLETS];
 
+extern GameScreen currentScreen;  // Declare external variable
+
 void sandBox() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
@@ -43,6 +45,12 @@ void sandBox() {
     enemy.base.hitbox = (Rectangle){ player.base.hitbox.x - 200, player.base.hitbox.y, 35, 60 };
     enemy.base.velocity = (Vector2){ 0, 0 };
     enemy.base.onGround = false;
+    enemy.health = 5;
+    enemy.deathTimer = 0.0f;
+    enemy.attackCooldown = 0.0f;  // Add this
+    enemy.attackWindup = 0.0f;    // Add this
+    enemy.isCharging = false;     // Add this
+    enemy.damageCooldown = 0.0f;
 
     // Use the global camera
     Camera2D *camera = getGameCamera();
@@ -92,7 +100,7 @@ void sandBox() {
 
         // Physics
         updatePlayer(&player, &enemy, platforms);
-        updateEnemy(&enemy, &player, platforms, 1, speed - 2, 5.0f);
+        updateEnemy(&enemy, &player, platforms, SMALL_PLATFORM_COUNT + 1, speed - 2, 5.0f);
 
         // Handle player–enemy collision
         
@@ -148,8 +156,14 @@ void sandBox() {
         }
 
         // Enemy and projectiles
-        if (enemy.isCharging) {
-            // Charging animation (pulsing effect)
+        if (enemy.health <= 0) {
+            // Death animation
+            float alpha = 1.0f - (enemy.deathTimer / 1.0f);  // 1 second fade
+            if (alpha > 0) {
+                DrawRectangleRec(enemy.base.hitbox, Fade(RED, alpha));
+            }
+        } else if (enemy.isCharging) {
+            // Normal charging animation
             float pulseScale = 1.0f + sinf(enemy.attackWindup * 10) * 0.2f;
             Rectangle animatedRect = enemy.base.hitbox;
             animatedRect.width *= pulseScale;

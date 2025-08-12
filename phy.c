@@ -15,6 +15,7 @@
 #define SLASH_DURATION 0.15f    // Increased from 0.2f to 0.3f
 #define SLASH_WIDTH_MULT 1.8f  // Slash width multiplier
 #define SLASH_HEIGHT_DIV 3.0f  // Slash height divider
+#define ENEMY_DAMAGE_COOLDOWN 0.2f  // Add this with other #defines
 
 float playerInvincibleTime = 0.1f;
 
@@ -56,7 +57,7 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     // Combat system
     player->isSlashing = false;
     player->slashTimer = 0.0f;
-    player->slashDuration = 0.2f;
+    player->slashDuration = SLASH_DURATION;  // Use the constant instead of hardcoded value
     player->slashHitbox = (Rectangle){ 0, 0, 40, 60 };
     player->facingDirection = 1;  // Start facing right
 }
@@ -140,21 +141,38 @@ void handleDash(Player *entity) {
 
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold) {
     float dt = GetFrameTime();
+
+    // Check for death first
+    if (enemy->health <= 0) {
+        enemy->deathTimer += dt;
+        return;
+    }
+
+    // Update damage cooldown first
+    if (enemy->damageCooldown > 0) {
+        enemy->damageCooldown -= dt;
+        if (enemy->damageCooldown < 0) enemy->damageCooldown = 0;
+    }
     
     // Update existing projectiles
     for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
         if (enemy->projectiles[i].active) {
-            // Update projectile position with proper time scaling
+            // Update projectile position
             enemy->projectiles[i].hitbox.x += enemy->projectiles[i].velocity.x * dt * 400.0f;
             enemy->projectiles[i].hitbox.y += enemy->projectiles[i].velocity.y * dt * 400.0f;
             
-            // Only check enemy collision if projectile has been parried
+            // Check parried projectile hits
             if (enemy->projectiles[i].isParried && 
                 CheckCollisionRecs(enemy->projectiles[i].hitbox, enemy->base.hitbox)) {
-                enemy->health--;
-                enemy->projectiles[i].active = false;
+                // Damage enemy when hit by parried projectile
+                if (enemy->damageCooldown <= 0) {
+                    enemy->health -= 2;  // Parried projectile damage
+                    enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+                    TraceLog(LOG_INFO, "Enemy hit by parried projectile! Health: %d", enemy->health);
+                }
                 
-                // Add knockback to enemy
+                // Deactivate projectile and apply knockback
+                enemy->projectiles[i].active = false;
                 enemy->base.velocity.x = -KNOCKBACK_FORCE_X;
                 enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
                 continue;
@@ -301,8 +319,8 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     // Movement & physics
     handleDash(player);
     handleJump(player);
-    handleSlash(player, enemy);  // Add this line
-    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);
+    handleSlash(player, enemy);
+    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);  // +1 for floor
 
     // Update facing direction based on movement
     if (!player->isDashing && player->knkbackTime <= 0.0f) {
@@ -380,34 +398,36 @@ void handleSlash(Player *player, Enemy *enemy) {
     if (player->isSlashing) {
         player->slashTimer += dt;
         
-        // Check for enemy projectile parry
-        for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
-            if (enemy->projectiles[i].active && !enemy->projectiles[i].isParried) {
-                if (CheckCollisionRecs(player->slashHitbox, enemy->projectiles[i].hitbox)) {
-                    // Reflect projectile and mark as parried
-                    Vector2 currentVel = enemy->projectiles[i].velocity;
-                    float speed = sqrtf(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
-                    
-                    // Reverse direction and double speed
-                    enemy->projectiles[i].velocity.x = -currentVel.x * 2.0f;
-                    enemy->projectiles[i].velocity.y = -currentVel.y * 2.0f;
-                    enemy->projectiles[i].isParried = true;
-                    
-                    TraceLog(LOG_INFO, "Projectile parried!");
+        if (enemy->damageCooldown <= 0) {
+            // Check for projectile parries first
+            for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
+                if (enemy->projectiles[i].active && !enemy->projectiles[i].isParried) {
+                    if (CheckCollisionRecs(player->slashHitbox, enemy->projectiles[i].hitbox)) {
+                        // Only reflect projectile, no damage on parry
+                        enemy->projectiles[i].velocity.x *= -2.0f;
+                        enemy->projectiles[i].velocity.y *= -2.0f;
+                        enemy->projectiles[i].isParried = true;
+                        
+                        TraceLog(LOG_INFO, "Projectile parried!");
+                        return;  // Exit after parry
+                    }
                 }
+            }
+            
+            // Regular slash check
+            if (CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
+                enemy->health--;
+                enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+                
+                // Knockback
+                float knockDir = (enemy->base.hitbox.x < player->base.hitbox.x) ? -1.0f : 1.0f;
+                enemy->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
+                enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
+                
+                TraceLog(LOG_INFO, "Enemy slashed! Health: %d", enemy->health);
             }
         }
 
-        // Check for enemy hit during slash
-        if (enemy && CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
-            enemy->health--;
-            // Add knockback to enemy
-            float knockDir = (enemy->base.hitbox.x < player->base.hitbox.x) ? -1.0f : 1.0f;
-            enemy->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
-            enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
-        }
-
-        // End slash after duration
         if (player->slashTimer >= player->slashDuration) {
             player->isSlashing = false;
         }

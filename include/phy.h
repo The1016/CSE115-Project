@@ -49,9 +49,9 @@ typedef struct {
     float attackWindup;    // Time spent preparing attack
     float attackCooldown;  // Time between attacks
     bool isCharging;       // Visual indicator state
-    // ... existing Enemy fields ...
+    float deathTimer; 
     EnemyProjectile projectiles[MAX_ENEMY_PROJECTILES];
-
+    float damageCooldown;
 } Enemy;
 
 
