@@ -4,7 +4,7 @@
 #include "raylib.h"
 
 
-
+#define MAX_ENEMY_PROJECTILES 10
 typedef struct  {
     Rectangle hitbox;      // Entity's hitbox for collision detection
     Vector2 velocity;   
@@ -26,7 +26,18 @@ typedef struct {
     float health;
     float deathTimer;
     bool isAlive;
+    bool isSlashing;
+    float slashTimer;
+    Rectangle slashHitbox;
+    float slashDuration;
+    int facingDirection; 
 } Player;
+typedef struct {
+    Rectangle hitbox;
+    Vector2 velocity;
+    bool active;
+    bool isParried; // New flag to track if projectile has been parried
+} EnemyProjectile;
 typedef struct {
     Entity base;
     bool active;
@@ -34,12 +45,22 @@ typedef struct {
     int health;
     int direction;
     float aiTimer;
-
     bool attacking;  // 👈 ADD THIS
+    float attackWindup;    // Time spent preparing attack
+    float attackCooldown;  // Time between attacks
+    bool isCharging;       // Visual indicator state
+    // ... existing Enemy fields ...
+    EnemyProjectile projectiles[MAX_ENEMY_PROJECTILES];
+
 } Enemy;
+
+
+
+
+
 void handleJump(Player *entity);
 void handleDash(Player *entity);
-
+void handleSlash(Player *player, Enemy *enemy);
 
 // Player and general object logic
 void applyGravity(Entity *entity, float gravity,float gravityscale);
@@ -48,6 +69,9 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms);
 
 // Enemy-specific logic
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);
-void resolveEntityCollision(Player *player, Enemy *enemy);
+
+// Add after other function declarations
+void initializePlayer(Player *player, float screenWidth, float screenHeight);
+Camera2D* getGameCamera(void);  // Function to access the camera
 
 #endif
