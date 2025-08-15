@@ -9,7 +9,7 @@
 
 // Shared screen state
 GameScreen currentScreen = SCREEN_MAIN_MENU;
-
+bool isPaused = false;
 
 
 void CustomLog(int logLevel, const char *text, va_list args) {

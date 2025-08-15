@@ -62,14 +62,14 @@ void sandBox() {
 
     while (currentScreen == SCREEN_SANDBOX && !WindowShouldClose()) {
         if (IsKeyPressed(KEY_ESCAPE)) {
-            TraceLog(LOG_INFO, "ESC pressed - returning to menu");
-            currentScreen = SCREEN_MAIN_MENU;
-            return;
+        isPaused = !isPaused;
         }
+
         if (IsKeyPressed(KEY_F1)) {
             debugMode = !debugMode;
             TraceLog(LOG_INFO, "Debug mode %s", debugMode ? "enabled" : "disabled");
         }
+            if (!isPaused) {
 
         Rectangle platforms[1 + SMALL_PLATFORM_COUNT];
         platforms[0] = floor;
@@ -225,9 +225,11 @@ void sandBox() {
             currentScreen = SCREEN_MAIN_MENU; // After 2s fade
             TraceLog(LOG_INFO, "Player death animation done - returning to main menu");
         }
-
+            }
         EndMode2D();
-
+        if (isPaused) {
+        ingameMenu();
+        }
         // UI elements (after EndMode2D)
         for (int i = 0; i < player.maxHealth; i++) {
             Color heartColor = (i < player.health) ? RED : DARKGRAY;

@@ -25,6 +25,9 @@ const char *diffLabels[DIFF_BUTTON_COUNT] = {
 const char *gamemodeLabel[GAMEMODE_COUNT] = {
     "STORY MODE", "CYBERGRID", "SANDBOX"
 };
+const char *pauseLabels[3] = { 
+    "CONTINUE", "SETTINGS", "QUIT" 
+};
 
 void ParentMenu() {
     int screenWidth = GetScreenWidth();
@@ -194,3 +197,53 @@ void gamemodeMenu(){
 
 }
 
+void ingameMenu() {
+    int screenWidth = GetScreenWidth();
+    int screenHeight = GetScreenHeight();
+    Vector2 mouse = GetMousePosition();
+
+
+    // Semi-transparent overlay
+    DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.5f));
+
+    // Title
+    const char *title = "PAUSED";
+    Vector2 titleSize = MeasureTextEx(titleFont, title, titleFontSize * 0.8f, 2);
+    Vector2 titlePos = { (screenWidth - titleSize.x) / 2, screenHeight / 4 };
+    DrawTextEx(titleFont, title, titlePos, titleFontSize * 0.8f, 2, WHITE);
+
+    // Buttons
+    int buttonWidth = 300;
+    int buttonHeight = 80;
+    int buttonSpacing = 30;
+    int totalHeight = 3 * buttonHeight + 2 * buttonSpacing;
+    int startY = (screenHeight - totalHeight) / 2 + 50;
+
+    for (int i = 0; i < 3; i++) {
+        Rectangle btn = {
+            screenWidth / 2.0f - buttonWidth / 2.0f,
+            startY + i * (buttonHeight + buttonSpacing),
+            buttonWidth, buttonHeight
+        };
+
+        bool hovered = CheckCollisionPointRec(mouse, btn);
+        Color btnColor = hovered ? Fade(LIGHTGRAY, 0.9f) : Fade(DARKGRAY, 0.8f);
+        DrawRectangleRec(btn, btnColor);
+
+        Vector2 labelSize = MeasureTextEx(menuFont, pauseLabels[i], fontSize, 2);
+        Vector2 labelPos = {
+            btn.x + (btn.width - labelSize.x) / 2,
+            btn.y + (btn.height - labelSize.y) / 2
+        };
+        DrawTextEx(menuFont, pauseLabels[i], labelPos, fontSize, 2, WHITE);
+
+        if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            if (i == 0) isPaused = false; // Continue
+            else if (i == 1) TraceLog(LOG_INFO, "Settings not implemented yet");
+            else if (i == 2) { // Quit
+                isPaused = false;
+                currentScreen = SCREEN_MAIN_MENU;
+            }
+        }
+    }
+}
