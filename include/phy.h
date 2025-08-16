@@ -5,10 +5,15 @@
 
 
 #define MAX_ENEMY_PROJECTILES 10
+typedef struct {
+    int x;
+    int y;
+}pos;
 typedef struct  {
     Rectangle hitbox;      // Entity's hitbox for collision detection
     Vector2 velocity;   
-    bool onGround;       // Flag to check if the entity is on the ground
+    bool onGround;  
+    bool isAlive; // Flag to check if the entity is alive
 } Entity;
 typedef struct {
     Entity base; // Inherit from Entity
@@ -31,6 +36,7 @@ typedef struct {
     Rectangle slashHitbox;
     float slashDuration;
     int facingDirection; 
+    bool hasDoubleJump; 
 } Player;
 typedef struct {
     Rectangle hitbox;
@@ -66,6 +72,7 @@ void handleSlash(Player *player, Enemy *enemy);
 void applyGravity(Entity *entity, float gravity,float gravityscale);
 void updateEntity(Entity *player, Rectangle *floor, int platformCount,float ignoreHorizontalCollision);
 void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms);
+void handlePlayerCollisionDamage(Player *player, Entity *enemyEntity, int damage);
 
 // Enemy-specific logic
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);

@@ -4,9 +4,11 @@
 #include "sandbox.h"
 #include "phy.h"
 #include "gun.h"
+#include "enemies.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+
 
 #define focusOffsetY 200  // Distance above player to center camera
 
@@ -25,6 +27,8 @@ void sandBox() {
     int screenHeight = GetScreenHeight();
 
     float speed = 5;
+    
+
     
     Rectangle floor = { 0, screenHeight - 100, screenWidth * 10, 150 };
     float floorTop = floor.y;
@@ -47,10 +51,21 @@ void sandBox() {
     enemy.base.onGround = false;
     enemy.health = 5;
     enemy.deathTimer = 0.0f;
-    enemy.attackCooldown = 0.0f;  // Add this
-    enemy.attackWindup = 0.0f;    // Add this
-    enemy.isCharging = false;     // Add this
+    enemy.attackCooldown = 0.0f;  
+    enemy.attackWindup = 0.0f;    
+    enemy.isCharging = false;     
     enemy.damageCooldown = 0.0f;
+    enemy.base.isAlive = true;
+
+    chaser enemy1 = {0};
+    enemy1.spawnPos.x = screenWidth / 2;
+    enemy1.spawnPos.y = floorTop - 200;
+    enemy1.base.hitbox = (Rectangle){enemy1.spawnPos.x, enemy1.spawnPos.y, 35, 60};
+    enemy1.base.velocity = (Vector2){0, 0};
+    enemy1.isChasing = false;
+    enemy1.patrolDirection = 1;
+    enemy1.patrolDistance = 200;
+
 
     // Use the global camera
     Camera2D *camera = getGameCamera();
@@ -102,6 +117,8 @@ void sandBox() {
         updatePlayer(&player, &enemy, platforms);
         updateEnemy(&enemy, &player, platforms, SMALL_PLATFORM_COUNT + 1, speed - 2, 5.0f);
 
+        handlePlayerCollisionDamage(&player, &enemy.base, 1);
+
         // Handle player–enemy collision
         
 
@@ -130,7 +147,7 @@ void sandBox() {
         BeginDrawing();
         ClearBackground(DARKGRAY);
         BeginMode2D(*camera);  // Use pointer dereference
-
+        Chasers(&enemy1, &player, platforms, SMALL_PLATFORM_COUNT + 1);
         // Background elements
         DrawRectangleRec(floor, BLACK);
         for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
@@ -156,12 +173,10 @@ void sandBox() {
         }
 
         // Enemy and projectiles
-        if (enemy.health <= 0) {
+        if (!enemy.base.isAlive) {
             // Death animation
             float alpha = 1.0f - (enemy.deathTimer / 1.0f);  // 1 second fade
-            if (alpha > 0) {
-                DrawRectangleRec(enemy.base.hitbox, Fade(RED, alpha));
-            }
+            DrawRectangleRec(enemy.base.hitbox, Fade(RED, alpha));
         } else if (enemy.isCharging) {
             // Normal charging animation
             float pulseScale = 1.0f + sinf(enemy.attackWindup * 10) * 0.2f;
@@ -219,6 +234,13 @@ void sandBox() {
             if (bullets[i].active) {
                 DrawRectangleLinesEx(bullets[i].hitbox, 2, PURPLE); 
             }
+                DrawLine(
+                enemy1.base.hitbox.x + enemy1.base.hitbox.width / 2,
+                enemy1.base.hitbox.y + enemy1.base.hitbox.height / 2,
+                enemy1.base.hitbox.x + enemy1.base.hitbox.width / 2 + 400* enemy1.patrolDirection,
+                enemy1.base.hitbox.y + enemy1.base.hitbox.height / 2,
+                BLUE
+            );
         }
         }
         if (!player.isAlive && player.deathTimer >= 2.0f) {

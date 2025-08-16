@@ -2,8 +2,9 @@
 #include <math.h>  // For fabs
 #include "sandbox.h"
 
+#define double_jump_velocity -8.0f;
 #define jump_velocity -10.0f // Jump velocity
-#define max_jumptime 0.35f // Maximum time for jump hold
+#define max_jumptime 0.425f // Maximum time for jump hold
 #define COYOTE_TIME 0.1f         // Allow jump 100ms after leaving ground
 #define JUMP_BUFFER_TIME 0.1f    // Allow jump 100ms before landing
 #define DASH_DURATION 0.2f
@@ -25,6 +26,19 @@ Camera2D* getGameCamera(void) {
     return &gameCamera;
 }
 
+void handlePlayerCollisionDamage(Player *player, Entity *enemyEntity, int damage) {
+    if (CheckCollisionRecs(player->base.hitbox, enemyEntity->hitbox) && player->iFrames <= 0.0f && enemyEntity->isAlive) {
+        player->health -= damage;
+        player->iFrames = IFRAME_TIME;
+
+        // Knockback
+        float knockDir = (player->base.hitbox.x < enemyEntity->hitbox.x) ? -1.0f : 1.0f;
+        player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
+        player->base.velocity.y = KNOCKBACK_FORCE_Y;
+
+        TraceLog(LOG_INFO, "Player hit! Health: %d", player->health);
+    }
+}
 void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     // Base entity properties
     player->base.hitbox = (Rectangle){ 
@@ -60,6 +74,7 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     player->slashDuration = SLASH_DURATION;  // Use the constant instead of hardcoded value
     player->slashHitbox = (Rectangle){ 0, 0, 40, 60 };
     player->facingDirection = 1;  // Start facing right
+    player->hasDoubleJump = true; 
 }
 
 void applyGravity(Entity *entity, float gravity, float gravityscale) {
@@ -68,32 +83,42 @@ void applyGravity(Entity *entity, float gravity, float gravityscale) {
 void handleJump(Player *entity) {
     float dt = GetFrameTime();
 
-    // Update timers
+    // --- Update timers ---
     if (entity->base.onGround) {
-        entity->coyoteTimer = COYOTE_TIME;  // Reset when grounded
+        entity->coyoteTimer = COYOTE_TIME;
+        entity->hasDoubleJump = true; 
     } else {
         entity->coyoteTimer -= dt;
     }
 
     if (IsKeyPressed(KEY_SPACE)) {
-        entity->jumpBufferTimer = JUMP_BUFFER_TIME;  // Store jump intent
+        entity->jumpBufferTimer = JUMP_BUFFER_TIME;
     } else {
         entity->jumpBufferTimer -= dt;
     }
 
-    // Perform jump if within valid window
+    // --- Normal jump (ground + coyote) ---
     if (entity->jumpBufferTimer > 0 && entity->coyoteTimer > 0) {
         entity->isJumping = true;
         entity->jumpTime = 0.0f;
         entity->base.velocity.y = jump_velocity;
         entity->base.onGround = false;
 
-        // Reset buffer so it doesn’t trigger multiple times
         entity->jumpBufferTimer = 0.0f;
         entity->coyoteTimer = 0.0f;
     }
 
-    // Handle variable height
+    // --- Hollow Knight style double jump ---
+    else if (IsKeyPressed(KEY_SPACE) && !entity->isJumping&& entity->hasDoubleJump) {
+        // snap upward regardless of falling or rising
+        entity->isJumping = true;
+        entity->jumpTime = 0.0f;
+        entity->base.velocity.y = double_jump_velocity;
+
+        entity->hasDoubleJump = false;   // consume double jump
+    }
+
+    // --- Variable jump height (only affects upward part of jump) ---
     if (entity->isJumping) {
         entity->jumpTime += dt;
         if (!IsKeyDown(KEY_SPACE) || entity->jumpTime >= max_jumptime) {
@@ -101,12 +126,16 @@ void handleJump(Player *entity) {
         }
     }
 
+    // --- Gravity ---
     float gravityScale = (entity->isJumping && entity->base.velocity.y < 0)
-                         ? 0.3f
-                         : 1.5f;
+                         ? 0.3f   // feathered rising
+                         : 1.5f;  // heavy falling
 
-    applyGravity( &entity->base, CONST_GRAVITY, gravityScale);
+    applyGravity(&entity->base, CONST_GRAVITY, gravityScale);
 }
+
+
+
 
 void handleDash(Player *entity) {
     float dt = GetFrameTime();
@@ -145,6 +174,7 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
     // Check for death first
     if (enemy->health <= 0) {
         enemy->deathTimer += dt;
+        enemy->base.isAlive = false;  // Mark enemy as dead
         return;
     }
 
@@ -327,6 +357,7 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
         if (IsKeyDown(KEY_D)) player->facingDirection = 1;
         if (IsKeyDown(KEY_A)) player->facingDirection = -1;
     }
+
 }
 
 
