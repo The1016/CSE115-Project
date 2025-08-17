@@ -4,7 +4,10 @@
 #include "raylib.h"
 
 
+
 #define MAX_ENEMY_PROJECTILES 10
+typedef enum { SLASH_FORWARD, SLASH_UP, SLASH_DOWN } SlashDirection;
+
 typedef struct {
     int x;
     int y;
@@ -35,8 +38,12 @@ typedef struct {
     float slashTimer;
     Rectangle slashHitbox;
     float slashDuration;
-    int facingDirection; 
+    SlashDirection slashDirection; // Direction of the slash
+    int facingDirection;
     bool hasDoubleJump; 
+    float slashCooldown; 
+    int slashAnchorFacing;
+    bool slashFlippedMid;
 } Player;
 typedef struct {
     Rectangle hitbox;

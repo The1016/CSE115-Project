@@ -147,7 +147,7 @@ void sandBox() {
         BeginDrawing();
         ClearBackground(DARKGRAY);
         BeginMode2D(*camera);  // Use pointer dereference
-        Chasers(&enemy1, &player, platforms, SMALL_PLATFORM_COUNT + 1);
+        //Chasers(&enemy1, &player, platforms, SMALL_PLATFORM_COUNT + 1);
         // Background elements
         DrawRectangleRec(floor, BLACK);
         for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {

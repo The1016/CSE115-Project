@@ -75,6 +75,9 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     player->slashHitbox = (Rectangle){ 0, 0, 40, 60 };
     player->facingDirection = 1;  // Start facing right
     player->hasDoubleJump = true; 
+    player->slashCooldown = 0.0f; 
+    player->slashAnchorFacing = player->facingDirection; 
+    bool slashFlippedMid = false;
 }
 
 void applyGravity(Entity *entity, float gravity, float gravityscale) {
@@ -188,15 +191,15 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
     for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
         if (enemy->projectiles[i].active) {
             // Update projectile position
-            enemy->projectiles[i].hitbox.x += enemy->projectiles[i].velocity.x * dt * 400.0f;
-            enemy->projectiles[i].hitbox.y += enemy->projectiles[i].velocity.y * dt * 400.0f;
+            enemy->projectiles[i].hitbox.x += enemy->projectiles[i].velocity.x * dt * 650.0f;
+            enemy->projectiles[i].hitbox.y += enemy->projectiles[i].velocity.y * dt * 650.0f;
             
             // Check parried projectile hits
             if (enemy->projectiles[i].isParried && 
                 CheckCollisionRecs(enemy->projectiles[i].hitbox, enemy->base.hitbox)) {
                 // Damage enemy when hit by parried projectile
                 if (enemy->damageCooldown <= 0) {
-                    enemy->health -= 2;  // Parried projectile damage
+                    enemy->health -= 3;  // Parried projectile damage
                     enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
                     TraceLog(LOG_INFO, "Enemy hit by parried projectile! Health: %d", enemy->health);
                 }
@@ -328,7 +331,7 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
 void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     float dt = GetFrameTime();
 
-    // Check for death first - before any other updates
+    // Death check
     if (player->health <= 0 && player->isAlive) {
         player->isAlive = false;
         player->deathTimer = 0.0f;
@@ -336,7 +339,6 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
         return;
     }
 
-    // If already dead, just update death timer
     if (!player->isAlive) {
         player->deathTimer += dt;
         return;
@@ -345,20 +347,22 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     // Update timers
     if (player->iFrames > 0.0f) player->iFrames -= dt;
     if (player->knkbackTime > 0.0f) player->knkbackTime -= dt;
+    if (player->slashCooldown > 0.0f) player->slashCooldown -= dt;  // <-- only here
 
-    // Movement & physics
+    // Movement & combat
     handleDash(player);
     handleJump(player);
     handleSlash(player, enemy);
-    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);  // +1 for floor
 
-    // Update facing direction based on movement
+    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);
+
+    // Update facing direction
     if (!player->isDashing && player->knkbackTime <= 0.0f) {
         if (IsKeyDown(KEY_D)) player->facingDirection = 1;
         if (IsKeyDown(KEY_A)) player->facingDirection = -1;
     }
-
 }
+
 
 
 
@@ -402,59 +406,114 @@ void updateEntity(Entity *entity, Rectangle *platforms, int platformCount, float
     }
 }
 
+// --- Slash ---
 void handleSlash(Player *player, Enemy *enemy) {
     float dt = GetFrameTime();
 
-    // Handle starting new slash
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !player->isSlashing) {
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+        !player->isSlashing &&
+        player->slashCooldown <= 0.0f) 
+    {
         player->isSlashing = true;
         player->slashTimer = 0.0f;
         player->slashDuration = SLASH_DURATION;
-        
-        float slashWidth = player->base.hitbox.width * SLASH_WIDTH_MULT;
+        player->slashCooldown = 0.35f;
+
+        // Decide slash direction
+        if (IsKeyDown(KEY_W)) player->slashDirection = SLASH_UP;
+        else if (IsKeyDown(KEY_S) && !player->base.onGround) player->slashDirection = SLASH_DOWN;
+        else player->slashDirection = SLASH_FORWARD;
+
+        player->slashAnchorFacing = player->facingDirection;
+        player->slashFlippedMid = false;
+
+        float slashWidth  = player->base.hitbox.width * SLASH_WIDTH_MULT;
         float slashHeight = player->base.hitbox.height / SLASH_HEIGHT_DIV;
-        
-        // Store the slash position when created - won't update with player movement
-        player->slashHitbox = (Rectangle){
-            player->facingDirection == 1 ? 
-                player->base.hitbox.x + player->base.hitbox.width : 
-                player->base.hitbox.x - slashWidth,
-            player->base.hitbox.y + (player->base.hitbox.height - slashHeight) / 2,
-            slashWidth,
-            slashHeight
-        };
+
+        switch (player->slashDirection) {
+            case SLASH_FORWARD:
+                player->slashHitbox = (Rectangle){
+                    player->slashAnchorFacing == 1 ?
+                        player->base.hitbox.x + player->base.hitbox.width :
+                        player->base.hitbox.x - slashWidth,
+                    player->base.hitbox.y + (player->base.hitbox.height - slashHeight) / 2,
+                    slashWidth,
+                    slashHeight
+                };
+                break;
+            case SLASH_UP:
+                player->slashHitbox = (Rectangle){
+                    player->base.hitbox.x + (player->base.hitbox.width - slashHeight) / 2,
+                    player->base.hitbox.y - slashWidth,
+                    slashHeight,
+                    slashWidth
+                };
+                break;
+            case SLASH_DOWN:
+                player->slashHitbox = (Rectangle){
+                    player->base.hitbox.x + (player->base.hitbox.width - slashHeight) / 2,
+                    player->base.hitbox.y + player->base.hitbox.height,
+                    slashHeight,
+                    slashWidth
+                };
+                break;
+        }
     }
 
-    // Update existing slash
     if (player->isSlashing) {
         player->slashTimer += dt;
-        
+
+        float slashWidth  = player->base.hitbox.width * SLASH_WIDTH_MULT;
+        float slashHeight = player->base.hitbox.height / SLASH_HEIGHT_DIV;
+
+        // Detect mid-slash flip
+        if (!player->slashFlippedMid && player->facingDirection != player->slashAnchorFacing) {
+            player->slashFlippedMid = true;
+        }
+
+        // Update horizontal position only if not flipped mid-slash
+        if (player->slashDirection == SLASH_FORWARD && !player->slashFlippedMid) {
+            player->slashHitbox.x = (player->slashAnchorFacing == 1) ?
+                                     player->base.hitbox.x + player->base.hitbox.width :
+                                     player->base.hitbox.x - slashWidth;
+        }
+
+        // Vertical slashes always follow player horizontally
+        if (player->slashDirection == SLASH_UP || player->slashDirection == SLASH_DOWN) {
+            player->slashHitbox.x = player->base.hitbox.x + (player->base.hitbox.width - slashHeight) / 2;
+        }
+
+        // Vertical positions
+        if (player->slashDirection == SLASH_UP) {
+            player->slashHitbox.y = player->base.hitbox.y - slashWidth;
+        } else if (player->slashDirection == SLASH_DOWN) {
+            player->slashHitbox.y = player->base.hitbox.y + player->base.hitbox.height;
+        } else if (player->slashDirection == SLASH_FORWARD) {
+            player->slashHitbox.y = player->base.hitbox.y + (player->base.hitbox.height - slashHeight) / 2;
+        }
+
+        // --- Collision checks ---
         if (enemy->damageCooldown <= 0) {
-            // Check for projectile parries first
             for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
                 if (enemy->projectiles[i].active && !enemy->projectiles[i].isParried) {
                     if (CheckCollisionRecs(player->slashHitbox, enemy->projectiles[i].hitbox)) {
-                        // Only reflect projectile, no damage on parry
                         enemy->projectiles[i].velocity.x *= -2.0f;
                         enemy->projectiles[i].velocity.y *= -2.0f;
                         enemy->projectiles[i].isParried = true;
-                        
                         TraceLog(LOG_INFO, "Projectile parried!");
-                        return;  // Exit after parry
+                        return;
                     }
                 }
             }
-            
-            // Regular slash check
+
             if (CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
                 enemy->health--;
                 enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
-                
-                // Knockback
+
                 float knockDir = (enemy->base.hitbox.x < player->base.hitbox.x) ? -1.0f : 1.0f;
                 enemy->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
                 enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
-                
+
                 TraceLog(LOG_INFO, "Enemy slashed! Health: %d", enemy->health);
             }
         }
