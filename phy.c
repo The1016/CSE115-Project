@@ -10,13 +10,14 @@
 #define DASH_DURATION 0.2f
 #define DASH_SPEED 15.0f
 #define DASH_COOLDOWN 0.4f
-#define KNOCKBACK_FORCE_X 13.0f   // Horizontal push speed
-#define KNOCKBACK_FORCE_Y -7.0f  // Upward bounce (negative = up)
+#define KNOCKBACK_FORCE_X 0.0f   // Horizontal push speed
+#define KNOCKBACK_FORCE_Y 0.0f // Upward bounce (negative = up)
 #define IFRAME_TIME 0.5f  // seconds
 #define SLASH_DURATION 0.15f    // Increased from 0.2f to 0.3f
 #define SLASH_WIDTH_MULT 1.8f  // Slash width multiplier
 #define SLASH_HEIGHT_DIV 3.0f  // Slash height divider
 #define ENEMY_DAMAGE_COOLDOWN 0.2f  // Add this with other #defines
+
 
 float playerInvincibleTime = 0.1f;
 
@@ -78,6 +79,9 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     player->slashCooldown = 0.0f; 
     player->slashAnchorFacing = player->facingDirection; 
     bool slashFlippedMid = false;
+    player->recoilTime = 0.0f;
+    player->recoilDuration = 0.1f;   // recoil lasts ~100ms
+    player->recoilStrength = 30.9f;   // adjust strength
 }
 
 void applyGravity(Entity *entity, float gravity, float gravityscale) {
@@ -285,6 +289,8 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
             enemy->isCharging = false;
             enemy->attackCooldown = 2.0f;
         }
+         applyGravity(&enemy->base, 0.5f, 1);
+        updateEntity(&enemy->base, platforms, platformCount, 0.0f);
         return;
     }
 
@@ -347,14 +353,28 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     // Update timers
     if (player->iFrames > 0.0f) player->iFrames -= dt;
     if (player->knkbackTime > 0.0f) player->knkbackTime -= dt;
-    if (player->slashCooldown > 0.0f) player->slashCooldown -= dt;  // <-- only here
+    if (player->slashCooldown > 0.0f) player->slashCooldown -= dt;
+
+    // --- Handle time-based recoil ---
+    if (player->recoilTime > 0.0f) {
+        player->recoilTime -= dt;
+
+        float t = player->recoilTime / player->recoilDuration;
+
+        // apply decaying recoil every frame
+        player->base.hitbox.x += player->recoilVelocityX * t;
+
+        if (player->recoilTime <= 0.0f) {
+            player->recoilVelocityX = 0;
+        }
+    }
 
     // Movement & combat
     handleDash(player);
     handleJump(player);
     handleSlash(player, enemy);
 
-    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 1, player->knkbackTime);
+    updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 7, player->knkbackTime);
 
     // Update facing direction
     if (!player->isDashing && player->knkbackTime <= 0.0f) {
@@ -362,6 +382,7 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
         if (IsKeyDown(KEY_A)) player->facingDirection = -1;
     }
 }
+
 
 
 
@@ -514,8 +535,22 @@ void handleSlash(Player *player, Enemy *enemy) {
                 enemy->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
                 enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
 
+                // --- Player recoil (time-based) ---
+                player->recoilTime = player->recoilDuration;
+                float recoilDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
+                player->recoilVelocityX = recoilDir * player->recoilStrength;
+
                 TraceLog(LOG_INFO, "Enemy slashed! Health: %d", enemy->health);
+
+                // --- POGO if down slash ---
+                if (player->slashDirection == SLASH_DOWN) {
+                    player->base.velocity.y = -12.0f;
+                    player->base.onGround = false;
+                    player->hasDoubleJump = true;
+                    TraceLog(LOG_INFO, "POGO triggered!");
+                }
             }
+            
         }
 
         if (player->slashTimer >= player->slashDuration) {

@@ -44,6 +44,10 @@ typedef struct {
     float slashCooldown; 
     int slashAnchorFacing;
     bool slashFlippedMid;
+    float recoilTime;
+    float recoilDuration;
+    float recoilStrength;
+    float recoilVelocityX; 
 } Player;
 typedef struct {
     Rectangle hitbox;

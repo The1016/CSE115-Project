@@ -15,6 +15,7 @@ bool debugMode = false;
 int SMALL_PLATFORM_COUNT = 4;
 float CONST_GRAVITY = 0.5f;
 
+
 Rectangle *smallPlatforms;
 Bullet bullets[MAX_BULLETS];
 
@@ -24,16 +25,20 @@ void sandBox() {
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
     float speed = 5;
+    
 
+    
     Rectangle floor = { 0, screenHeight - 100, screenWidth * 10, 150 };
     float floorTop = floor.y;
     float floorBottom = floor.y + floor.height;
-
+    
     smallPlatforms = malloc(SMALL_PLATFORM_COUNT * sizeof(Rectangle));
+
     smallPlatforms[0] = (Rectangle){ screenWidth / 3, floorTop - 190, 100, 20 };
     smallPlatforms[1] = (Rectangle){ screenWidth / 2, floorTop - 290, 100, 20 };
     smallPlatforms[2] = (Rectangle){ screenWidth / 4, floorTop - 340, 100, 20 };
     smallPlatforms[3] = (Rectangle){ screenWidth / 1.5f, floorTop - 240, 100, 20 };
+        
 
     Player player = {0};
     initializePlayer(&player, screenWidth, screenHeight);
@@ -52,13 +57,15 @@ void sandBox() {
 
     chaser enemy1 = {0};
     enemy1.spawnPos.x = screenWidth / 2;
-    enemy1.spawnPos.y = floorTop - 200;
+    enemy1.spawnPos.y = bossFloorTop ;
     enemy1.base.hitbox = (Rectangle){enemy1.spawnPos.x, enemy1.spawnPos.y, 35, 60};
     enemy1.base.velocity = (Vector2){0, 0};
     enemy1.isChasing = false;
-    enemy1.patrolDirection = 1;
+    enemy1.patrolDirection = 1; 
     enemy1.patrolDistance = 200;
 
+
+    // Use the global camera
     Camera2D *camera = getGameCamera();
     camera->offset = (Vector2){ screenWidth / 2.0f, screenHeight / 2.0f };
     camera->zoom = 1.0f;
@@ -72,13 +79,13 @@ void sandBox() {
             debugMode = !debugMode;
             TraceLog(LOG_INFO, "Debug mode %s", debugMode ? "enabled" : "disabled");
         }
+            if (!isPaused) {
 
-        if (!isPaused) {
-            Rectangle platforms[1 + SMALL_PLATFORM_COUNT];
-            platforms[0] = floor;
-            for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
-                platforms[i + 1] = smallPlatforms[i];
-            }
+        Rectangle platforms[1 + SMALL_PLATFORM_COUNT];
+        platforms[0] = floor;
+        for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
+        platforms[i + 1] = smallPlatforms[i];
+        }
 
             // Movement
             if (!player.isDashing && player.knkbackTime <= 0.0f) {
@@ -115,12 +122,16 @@ void sandBox() {
                 desiredY
             };
 
-            BeginDrawing();
-            ClearBackground(DARKGRAY);
-            BeginMode2D(*camera);
-
-            DrawRectangleRec(floor, BLACK);
-            for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) DrawRectangleRec(smallPlatforms[i], PURPLE);
+        // Drawing - reorganized for proper order
+        BeginDrawing();
+        ClearBackground(DARKGRAY);
+        BeginMode2D(*camera);  // Use pointer dereference
+        //Chasers(&enemy1, &player, platforms, SMALL_PLATFORM_COUNT + 1);
+        // Background elements
+        DrawRectangleRec(floor, BLACK);
+        for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
+            DrawRectangleRec(smallPlatforms[i], PURPLE);
+        }
 
             DrawBullets(bullets, MAX_BULLETS);
 
@@ -159,36 +170,61 @@ void sandBox() {
                     if (debugMode) DrawRectangleLinesEx(enemy.projectiles[i].hitbox, 1, RED);
                 }
             }
+        }
 
-            if (debugMode && enemy.isCharging) {
-                Vector2 center = { enemy.base.hitbox.x + enemy.base.hitbox.width/2, enemy.base.hitbox.y + enemy.base.hitbox.height/2 };
-                Vector2 targetDir = { player.base.hitbox.x - enemy.base.hitbox.x, player.base.hitbox.y - enemy.base.hitbox.y };
-                float length = 30.0f;
-                Vector2 endPoint = {
-                    center.x + (targetDir.x/hypot(targetDir.x, targetDir.y)) * length,
-                    center.y + (targetDir.y/hypot(targetDir.x, targetDir.y)) * length
-                };
-                DrawLineEx(center, endPoint, 3, YELLOW);
+        // Move the aim indicator to debug mode
+        if (debugMode && enemy.isCharging) {
+            Vector2 center = {
+                enemy.base.hitbox.x + enemy.base.hitbox.width/2,
+                enemy.base.hitbox.y + enemy.base.hitbox.height/2
+            };
+            Vector2 targetDirection = {
+                player.base.hitbox.x - enemy.base.hitbox.x,
+                player.base.hitbox.y - enemy.base.hitbox.y
+            };
+            float length = 30.0f;
+            Vector2 endPoint = {
+                center.x + (targetDirection.x/hypot(targetDirection.x, targetDirection.y)) * length,
+                center.y + (targetDirection.y/hypot(targetDirection.x, targetDirection.y)) * length
+            };
+            DrawLineEx(center, endPoint, 3, YELLOW);
+        }
+
+        // Debug overlays
+        if (debugMode) {
+            DrawRectangleLines(player.base.hitbox.x, player.base.hitbox.y, player.base.hitbox.width, player.base.hitbox.height, BLUE);
+            DrawRectangleLines(floor.x, floor.y, floor.width, floor.height, GREEN);
+            DrawRectangleLines(enemy.base.hitbox.x, enemy.base.hitbox.y, enemy.base.hitbox.width, enemy.base.hitbox.height, ORANGE);
+            for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
+            DrawRectangleLines(smallPlatforms[i].x, smallPlatforms[i].y, smallPlatforms[i].width, smallPlatforms[i].height, GREEN);
             }
-
-            if (debugMode) {
-                DrawRectangleLines(player.base.hitbox.x, player.base.hitbox.y, player.base.hitbox.width, player.base.hitbox.height, BLUE);
-                DrawRectangleLines(floor.x, floor.y, floor.width, floor.height, GREEN);
-                DrawRectangleLines(enemy.base.hitbox.x, enemy.base.hitbox.y, enemy.base.hitbox.width, enemy.base.hitbox.height, ORANGE);
-                for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) DrawRectangleLines(smallPlatforms[i].x, smallPlatforms[i].y, smallPlatforms[i].width, smallPlatforms[i].height, GREEN);
-                for (int i = 0; i < MAX_BULLETS; i++) if (bullets[i].active) DrawRectangleLinesEx(bullets[i].hitbox, 2, PURPLE);
+            for (int i = 0; i < MAX_BULLETS; i++) {
+            if (bullets[i].active) {
+                DrawRectangleLinesEx(bullets[i].hitbox, 2, PURPLE); 
             }
-
-            if (!player.isAlive && player.deathTimer >= 2.0f) currentScreen = SCREEN_MAIN_MENU;
-
-            EndMode2D();
-
-            if (isPaused) ingameMenu();
-
-            for (int i = 0; i < player.maxHealth; i++) {
-                Color heartColor = (i < player.health) ? RED : DARKGRAY;
-                DrawRectangle(20 + i * 40, 20, 30, 30, heartColor);
+                DrawLine(
+                enemy1.base.hitbox.x + enemy1.base.hitbox.width / 2,
+                enemy1.base.hitbox.y + enemy1.base.hitbox.height / 2,
+                enemy1.base.hitbox.x + enemy1.base.hitbox.width / 2 + 400* enemy1.patrolDirection,
+                enemy1.base.hitbox.y + enemy1.base.hitbox.height / 2,
+                BLUE
+            );
+        }
+        }
+        if (!player.isAlive && player.deathTimer >= 2.0f) {
+            currentScreen = SCREEN_MAIN_MENU; // After 2s fade
+            TraceLog(LOG_INFO, "Player death animation done - returning to main menu");
+        }
             }
+        EndMode2D();
+        if (isPaused) {
+        ingameMenu();
+        }
+        // UI elements (after EndMode2D)
+        for (int i = 0; i < player.maxHealth; i++) {
+            Color heartColor = (i < player.health) ? RED : DARKGRAY;
+            DrawRectangle(20 + i * 40, 20, 30, 30, heartColor);
+        }
 
             EndDrawing();
         }
