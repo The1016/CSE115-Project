@@ -10,7 +10,6 @@ void LoadAllFonts(void)
     titleFont = LoadFontEx("assets/CinzelDecorative-Regular.ttf", 140, 0, 0);
     GenTextureMipmaps(&titleFont.texture);
     SetTextureFilter(titleFont.texture, TEXTURE_FILTER_TRILINEAR);
-    SetTextureFilter(titleFont.texture, TEXTURE_FILTER_POINT);
 
     msgFont = LoadFontEx("assets/CinzelDecorative-Regular.ttf", 30, 0, 0);
     GenTextureMipmaps(&msgFont.texture);
