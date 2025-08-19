@@ -9,6 +9,7 @@
 #define chaser_walk_speed 3.0f
 #define chaser_run_speed 6.5f   
 #define vision_range 400.0f
+#define ENEMY_DAMAGE_COOLDOWN 0.5;
 
 
 extern bool gatesOpen; // Global flag for gate state
@@ -54,7 +55,7 @@ void Chasers(chaser *enemy, Player *player, Rectangle *platforms, int platformCo
 void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount) {
     float dt = GetFrameTime();
 
-    // If gates are still open, boss is idle (don’t update logic, just draw faintly)
+    // --- Gates open? Boss is idle ---
     if (gatesOpen) {
         DrawRectangleRec(enemy->base.hitbox, Fade(GRAY, 0.3f));
         return;
@@ -69,23 +70,23 @@ void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount
         return;
     }
 
+    // --- Update damage cooldown ---
+    if (enemy->damageCooldown > 0) {
+        enemy->damageCooldown -= dt;
+        if (enemy->damageCooldown < 0) enemy->damageCooldown = 0;
+    }
+
     // --- If boss is NOT awake yet ---
     if (!enemy->isAwake) {
-        // Draw him idle
         DrawRectangleRec(enemy->base.hitbox, Fade(PURPLE, 0.5f));
 
-        // Wake up if slashed
+        // Wake up only (don’t kill him here)
         if (player->isSlashing && CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
-            enemy->health -= 1;      
             enemy->isAwake = true;   
             enemy->showName = true;
             enemy->nameTimer = 3.0f;   // show for 3 seconds
-            if (enemy->health <= 0) {
-                enemy->base.isAlive = false;
-                enemy->deathTimer = 0.0f;
-            }
+            TraceLog(LOG_INFO, "Boss has awakened!");
         }
-
         return; // don’t run AI until awake
     }
 
@@ -174,41 +175,48 @@ void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount
     }
 
     // --- Boss taking damage from melee slash ---
-    if (player->isSlashing && CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
+    if (enemy->damageCooldown <= 0.0f &&
+        player->isSlashing &&
+        CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) 
+    {
         enemy->health -= 1;
+        enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;  // Prevent instant multi-hits
+        TraceLog(LOG_INFO, "Boss hit! Health: %d", enemy->health);
+
         if (enemy->health <= 0) {
             enemy->base.isAlive = false;
             enemy->deathTimer = 0.0f;
+            TraceLog(LOG_INFO, "Boss defeated!");
         }
     }
 
-// --- Boss Name popup ---
-if (enemy->showName) {
-    enemy->nameTimer -= dt;
-    if (enemy->nameTimer <= 0) {
-        enemy->showName = false;
-    } else {
-        // Fade during the last second
-        float alpha = (enemy->nameTimer > 1.0f) ? 1.0f : enemy->nameTimer / 1.0f;
-        Color nameColor = Fade(MAROON, alpha);
+    // --- Boss Name popup ---
+    if (enemy->showName) {
+        enemy->nameTimer -= dt;
+        if (enemy->nameTimer <= 0) {
+            enemy->showName = false;
+        } else {
+            float alpha = (enemy->nameTimer > 1.0f) ? 1.0f : enemy->nameTimer / 1.0f;
+            Color nameColor = Fade(MAROON, alpha);
 
-        const char *bossName = "THE BRUTE";
-        int fontSize = 40;
-        int padding = 20;
+            const char *bossName = "THE BRUTE";
+            int fontSize = 40;
+            int padding = 20;
 
-        Vector2 size = MeasureTextEx(msgFont, bossName, fontSize, 2);
+            Vector2 size = MeasureTextEx(msgFont, bossName, fontSize, 2);
 
-        DrawTextEx(
-            msgFont,
-            bossName,
-            (Vector2){ GetScreenWidth() - size.x - padding, GetScreenHeight() - fontSize - padding },
-            fontSize,
-            2,
-            nameColor
-        );
+            DrawTextEx(
+                msgFont,
+                bossName,
+                (Vector2){ GetScreenWidth() - size.x - padding, GetScreenHeight() - fontSize - padding },
+                fontSize,
+                2,
+                nameColor
+            );
+        }
     }
 }
-}
+
 
 
 

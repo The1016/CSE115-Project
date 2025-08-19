@@ -4,11 +4,19 @@
 #include "raylib.h"
 
 
+
 #define MAX_ENEMY_PROJECTILES 10
+typedef enum { SLASH_FORWARD, SLASH_UP, SLASH_DOWN } SlashDirection;
+
+typedef struct {
+    int x;
+    int y;
+}pos;
 typedef struct  {
     Rectangle hitbox;      // Entity's hitbox for collision detection
     Vector2 velocity;   
-    bool onGround;       // Flag to check if the entity is on the ground
+    bool onGround;  
+    bool isAlive; // Flag to check if the entity is alive
 } Entity;
 typedef struct {
     Entity base; // Inherit from Entity
@@ -30,7 +38,16 @@ typedef struct {
     float slashTimer;
     Rectangle slashHitbox;
     float slashDuration;
-    int facingDirection; 
+    SlashDirection slashDirection; // Direction of the slash
+    int facingDirection;
+    bool hasDoubleJump; 
+    float slashCooldown; 
+    int slashAnchorFacing;
+    bool slashFlippedMid;
+    float recoilTime;
+    float recoilDuration;
+    float recoilStrength;
+    float recoilVelocityX; 
 } Player;
 typedef struct {
     Rectangle hitbox;
@@ -49,9 +66,9 @@ typedef struct {
     float attackWindup;    // Time spent preparing attack
     float attackCooldown;  // Time between attacks
     bool isCharging;       // Visual indicator state
-    // ... existing Enemy fields ...
+    float deathTimer; 
     EnemyProjectile projectiles[MAX_ENEMY_PROJECTILES];
-
+    float damageCooldown;
 } Enemy;
 
 
@@ -66,6 +83,7 @@ void handleSlash(Player *player, Enemy *enemy);
 void applyGravity(Entity *entity, float gravity,float gravityscale);
 void updateEntity(Entity *player, Rectangle *floor, int platformCount,float ignoreHorizontalCollision);
 void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms);
+void handlePlayerCollisionDamage(Player *player, Entity *enemyEntity, int damage);
 
 // Enemy-specific logic
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);

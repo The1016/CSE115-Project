@@ -24,6 +24,7 @@ typedef struct {
     bool isAwake;
     bool showName; 
     float nameTimer;
+    float damageCooldown;
 } boss1;
 
 void Chasers(chaser *enemy, Player *player, Rectangle *platforms, int platformCount);
