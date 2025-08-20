@@ -177,6 +177,18 @@ void sandBox() {
             player.base.hitbox.x + player.base.hitbox.width / 2,
             desiredY
         };
+        Vector2 cameraTarget;
+        if (!gatesOpen && Brute.base.isAlive) {
+            // Boss fight: lock horizontally in boss room, but keep Y as desiredY
+            float bossRoomCenterX = (bossRoomL.x + bossRoomR.x + bossRoomR.width) / 2.0f;
+            cameraTarget = (Vector2){ bossRoomCenterX, desiredY };
+        } else {
+            // Normal camera following player
+            cameraTarget = (Vector2){ player.base.hitbox.x + player.base.hitbox.width / 2, desiredY };
+        }
+
+        camera->target = cameraTarget;
+
 
         // Drawing - reorganized for proper order
         BeginDrawing();
