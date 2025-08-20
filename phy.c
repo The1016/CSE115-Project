@@ -1,6 +1,7 @@
 #include "phy.h"
 #include <math.h>  // For fabs
 #include "sandbox.h"
+#include <stdio.h>
 
 #define double_jump_velocity -8.0f;
 #define jump_velocity -10.0f // Jump velocity
@@ -28,16 +29,16 @@ Camera2D* getGameCamera(void) {
 }
 
 void handlePlayerCollisionDamage(Player *player, Entity *enemyEntity, int damage) {
-    if (CheckCollisionRecs(player->base.hitbox, enemyEntity->hitbox) && player->iFrames <= 0.0f && enemyEntity->isAlive) {
-        player->health -= damage;
-        player->iFrames = IFRAME_TIME;
+    if (CheckCollisionRecs(player->base.hitbox, enemyEntity->hitbox) && player->base.damageCooldown <= 0.0f && enemyEntity->isAlive) {
+        player->base.health -= damage;
+        player->base.damageCooldown = IFRAME_TIME;
 
         // Knockback
         float knockDir = (player->base.hitbox.x < enemyEntity->hitbox.x) ? -1.0f : 1.0f;
         player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
         player->base.velocity.y = KNOCKBACK_FORCE_Y;
 
-        TraceLog(LOG_INFO, "Player hit! Health: %d", player->health);
+        TraceLog(LOG_INFO, "Player hit! Health: %d", player->base.health);
     }
 }
 void initializePlayer(Player *player, float screenWidth, float screenHeight) {
@@ -53,10 +54,10 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
 
     // Health system
     player->maxHealth = 3;
-    player->health = player->maxHealth;
+    player->base.health = player->maxHealth;
     player->isAlive = true;
     player->deathTimer = 0.0f;
-    player->iFrames = 0.0f;
+    player->base.damageCooldown = 0.0f;
 
     // Movement system
     player->isJumping = false;
@@ -174,122 +175,111 @@ void handleDash(Player *entity) {
     }
 }
 
-
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold) {
     float dt = GetFrameTime();
 
-    // Check for death first
-    if (enemy->health <= 0) {
+    // --- Check for death ---
+    if (enemy->base.health <= 0) {
         enemy->deathTimer += dt;
-        enemy->base.isAlive = false;  // Mark enemy as dead
+        enemy->base.isAlive = false;
         return;
     }
 
-    // Update damage cooldown first
-    if (enemy->damageCooldown > 0) {
-        enemy->damageCooldown -= dt;
-        if (enemy->damageCooldown < 0) enemy->damageCooldown = 0;
+    // --- Damage cooldown ---
+    if (enemy->base.damageCooldown > 0) {
+        enemy->base.damageCooldown -= dt;
+        if (enemy->base.damageCooldown < 0) enemy->base.damageCooldown = 0;
     }
-    
-    // Update existing projectiles
+
+    // --- Projectiles update (including parry) ---
     for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
-        if (enemy->projectiles[i].active) {
-            // Update projectile position
-            enemy->projectiles[i].hitbox.x += enemy->projectiles[i].velocity.x * dt * 650.0f;
-            enemy->projectiles[i].hitbox.y += enemy->projectiles[i].velocity.y * dt * 650.0f;
-            
-            // Check parried projectile hits
-            if (enemy->projectiles[i].isParried && 
-                CheckCollisionRecs(enemy->projectiles[i].hitbox, enemy->base.hitbox)) {
-                // Damage enemy when hit by parried projectile
-                if (enemy->damageCooldown <= 0) {
-                    enemy->health -= 3;  // Parried projectile damage
-                    enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
-                    TraceLog(LOG_INFO, "Enemy hit by parried projectile! Health: %d", enemy->health);
-                }
-                
-                // Deactivate projectile and apply knockback
-                enemy->projectiles[i].active = false;
-                enemy->base.velocity.x = -KNOCKBACK_FORCE_X;
-                enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
-                continue;
+        EnemyProjectile *p = &enemy->projectiles[i];
+        if (!p->active) continue;
+
+        // Move projectile
+        p->hitbox.x += p->velocity.x * dt * 650.0f;
+        p->hitbox.y += p->velocity.y * dt * 650.0f;
+
+        // --- Check for player parry ---
+        if (!p->isParried && player->isSlashing && CheckCollisionRecs(player->slashHitbox, p->hitbox)) {
+            p->isParried = true;
+            p->velocity.x = -p->velocity.x * 2.0f;
+            p->velocity.y = -p->velocity.y * 2.0f;
+            TraceLog(LOG_INFO, "Projectile parried!");
+        }
+
+        // --- Parried projectile hits enemy ---
+        if (p->isParried && CheckCollisionRecs(p->hitbox, enemy->base.hitbox)) {
+            if (enemy->base.damageCooldown <= 0) {
+                enemy->base.health -= 3; // Parried projectile damage
+                enemy->base.damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+                TraceLog(LOG_INFO, "Enemy hit by parried projectile! Health: %d", enemy->base.health);
             }
-            
-            // Rest of the collision checks...
-            // Check collision with platforms
-            for (int j = 0; j < platformCount; j++) {
-                if (CheckCollisionRecs(enemy->projectiles[i].hitbox, platforms[j])) {
-                    enemy->projectiles[i].active = false;
-                    break;
-                }
+            p->active = false;
+            continue;
+        }
+
+        // --- Normal projectile hits player ---
+        if (!p->isParried && CheckCollisionRecs(p->hitbox, player->base.hitbox) && player->isAlive) {
+            if (player->base.damageCooldown <= 0.0f) {
+                player->base.health--;
+                player->base.damageCooldown = IFRAME_TIME;
+                float knockDir = (player->base.hitbox.x < p->hitbox.x) ? -1.0f : 1.0f;
+                player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
+                player->base.velocity.y = KNOCKBACK_FORCE_Y;
             }
-            
-            // Check collision with player
-            if (CheckCollisionRecs(enemy->projectiles[i].hitbox, player->base.hitbox) && player->isAlive) {
-                if (player->iFrames <= 0.0f) {
-                    player->health--;
-                    player->iFrames = IFRAME_TIME;
-                    
-                    // Add knockback
-                    float knockDir = (player->base.hitbox.x < enemy->projectiles[i].hitbox.x) ? -1.0f : 1.0f;
-                    player->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
-                    player->base.velocity.y = KNOCKBACK_FORCE_Y;
-                }
-                enemy->projectiles[i].active = false;
-            }
-            
-            // Deactivate if off screen (optional)
-            if (enemy->projectiles[i].hitbox.x < -1000 || enemy->projectiles[i].hitbox.x > 10000) {
-                enemy->projectiles[i].active = false;
+            p->active = false;
+        }
+
+        // --- Collision with platforms ---
+        for (int j = 0; j < platformCount; j++) {
+            if (CheckCollisionRecs(p->hitbox, platforms[j])) {
+                p->active = false;
+                break;
             }
         }
+
+        // --- Off-screen cleanup ---
+        if (p->hitbox.x < -1000 || p->hitbox.x > 10000) {
+            p->active = false;
+        }
     }
-    
-    // Attack cooldown and charging logic
+
+    // --- Attack cooldown and projectile spawn ---
     if (enemy->attackCooldown > 0) {
         enemy->attackCooldown -= dt;
     }
-    
+
     if (enemy->attackCooldown <= 0 && !enemy->isCharging) {
         enemy->isCharging = true;
         enemy->attackWindup = 1.0f;
         enemy->base.velocity.x = 0;
     }
-    
+
     if (enemy->isCharging) {
         enemy->attackWindup -= dt;
         if (enemy->attackWindup <= 0) {
-            // Create new projectile
+            // Spawn projectile toward player
             for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
                 if (!enemy->projectiles[i].active) {
-                    // Calculate direction vector
-                    Vector2 direction = {
-                        player->base.hitbox.x - enemy->base.hitbox.x,
-                        player->base.hitbox.y - enemy->base.hitbox.y
-                    };
-                    
-                    // Normalize direction vector
-                    float length = sqrtf(direction.x * direction.x + direction.y * direction.y);
-                    direction.x /= length;
-                    direction.y /= length;
-                    
-                    // Create projectile
+                    Vector2 dir = { player->base.hitbox.x - enemy->base.hitbox.x, player->base.hitbox.y - enemy->base.hitbox.y };
+                    float len = sqrtf(dir.x*dir.x + dir.y*dir.y);
+                    dir.x /= len; dir.y /= len;
+
                     enemy->projectiles[i].active = true;
-                    enemy->projectiles[i].isParried = false;  // Initialize as not parried
-                    enemy->projectiles[i].hitbox = (Rectangle){
-                        enemy->base.hitbox.x + enemy->base.hitbox.width/2,
-                        enemy->base.hitbox.y + enemy->base.hitbox.height/2,
-                        15, 15  // Projectile size
-                    };
-                    enemy->projectiles[i].velocity = direction;
+                    enemy->projectiles[i].isParried = false;
+                    enemy->projectiles[i].hitbox = (Rectangle){ enemy->base.hitbox.x + enemy->base.hitbox.width/2,
+                                                                enemy->base.hitbox.y + enemy->base.hitbox.height/2,
+                                                                15, 15 };
+                    enemy->projectiles[i].velocity = dir;
                     break;
                 }
             }
-            
             enemy->isCharging = false;
             enemy->attackCooldown = 2.0f;
         }
-         applyGravity(&enemy->base, 0.5f, 1);
+
+        applyGravity(&enemy->base, 0.5f, 1);
         updateEntity(&enemy->base, platforms, platformCount, 0.0f);
         return;
     }
@@ -301,9 +291,8 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
         return;
     }
 
+    // --- Horizontal AI movement ---
     float distanceX = player->base.hitbox.x - enemy->base.hitbox.x;
-
-    // Horizontal movement toward player
     if (fabs(distanceX) > chaseThreshold) {
         enemy->base.velocity.x = (distanceX > 0) ? chaseSpeed : -chaseSpeed;
     } else {
@@ -313,32 +302,28 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
     applyGravity(&enemy->base, 0.5f, 1);
     updateEntity(&enemy->base, platforms, platformCount, 0.0f);
 
-    // Stop overlapping vertically
+    // --- Vertical overlap correction ---
     if (CheckCollisionRecs(player->base.hitbox, enemy->base.hitbox)) {
-    // Player lands on top of enemy
-    if (player->base.velocity.y > 0 &&
-        player->base.hitbox.y + player->base.hitbox.height - enemy->base.hitbox.y < 10) {
-        
-        player->base.hitbox.y = enemy->base.hitbox.y - player->base.hitbox.height;
-        player->base.velocity.y = 0;
-        player->base.onGround = true;
-    }
-    // Enemy lands on top of player
-    else if (enemy->base.velocity.y > 0 &&
-             enemy->base.hitbox.y + enemy->base.hitbox.height - player->base.hitbox.y < 10) {
-        
-        enemy->base.hitbox.y = player->base.hitbox.y - enemy->base.hitbox.height;
-        enemy->base.velocity.y = 0;
-        enemy->base.onGround = true;
+        if (player->base.velocity.y > 0 &&
+            player->base.hitbox.y + player->base.hitbox.height - enemy->base.hitbox.y < 10) {
+            player->base.hitbox.y = enemy->base.hitbox.y - player->base.hitbox.height;
+            player->base.velocity.y = 0;
+            player->base.onGround = true;
+        } else if (enemy->base.velocity.y > 0 &&
+                   enemy->base.hitbox.y + enemy->base.hitbox.height - player->base.hitbox.y < 10) {
+            enemy->base.hitbox.y = player->base.hitbox.y - enemy->base.hitbox.height;
+            enemy->base.velocity.y = 0;
+            enemy->base.onGround = true;
+        }
     }
 }
-}
+
 
 void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     float dt = GetFrameTime();
 
     // Death check
-    if (player->health <= 0 && player->isAlive) {
+    if (player->base.health <= 0 && player->isAlive) {
         player->isAlive = false;
         player->deathTimer = 0.0f;
         TraceLog(LOG_INFO, "Player died - health reached 0");
@@ -351,7 +336,7 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     }
 
     // Update timers
-    if (player->iFrames > 0.0f) player->iFrames -= dt;
+    if (player->base.damageCooldown > 0.0f) player->base.damageCooldown -= dt;
     if (player->knkbackTime > 0.0f) player->knkbackTime -= dt;
     if (player->slashCooldown > 0.0f) player->slashCooldown -= dt;
 
@@ -372,7 +357,9 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
     // Movement & combat
     handleDash(player);
     handleJump(player);
-    handleSlash(player, enemy);
+    handleSlash(player, (Entity*)&enemy->base); 
+
+    
 
     updateEntity(&player->base, platforms, SMALL_PLATFORM_COUNT + 7, player->knkbackTime);
 
@@ -427,10 +414,13 @@ void updateEntity(Entity *entity, Rectangle *platforms, int platformCount, float
     }
 }
 
+
 // --- Slash ---
-void handleSlash(Player *player, Enemy *enemy) {
+// --- Slash ---
+void handleSlash(Player *player, Entity *target) {
     float dt = GetFrameTime();
 
+    // --- Start a new slash ---
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
         !player->isSlashing &&
         player->slashCooldown <= 0.0f) 
@@ -441,9 +431,12 @@ void handleSlash(Player *player, Enemy *enemy) {
         player->slashCooldown = 0.35f;
 
         // Decide slash direction
-        if (IsKeyDown(KEY_W)) player->slashDirection = SLASH_UP;
-        else if (IsKeyDown(KEY_S) && !player->base.onGround) player->slashDirection = SLASH_DOWN;
-        else player->slashDirection = SLASH_FORWARD;
+        if (IsKeyDown(KEY_W)) 
+            player->slashDirection = SLASH_UP;
+        else if (IsKeyDown(KEY_S) && !player->base.onGround) 
+            player->slashDirection = SLASH_DOWN;
+        else 
+            player->slashDirection = SLASH_FORWARD;
 
         player->slashAnchorFacing = player->facingDirection;
         player->slashFlippedMid = false;
@@ -481,6 +474,7 @@ void handleSlash(Player *player, Enemy *enemy) {
         }
     }
 
+    // --- While slashing ---
     if (player->isSlashing) {
         player->slashTimer += dt;
 
@@ -513,34 +507,35 @@ void handleSlash(Player *player, Enemy *enemy) {
             player->slashHitbox.y = player->base.hitbox.y + (player->base.hitbox.height - slashHeight) / 2;
         }
 
-        // --- Collision checks ---
-        if (enemy->damageCooldown <= 0) {
-            for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
-                if (enemy->projectiles[i].active && !enemy->projectiles[i].isParried) {
-                    if (CheckCollisionRecs(player->slashHitbox, enemy->projectiles[i].hitbox)) {
-                        enemy->projectiles[i].velocity.x *= -2.0f;
-                        enemy->projectiles[i].velocity.y *= -2.0f;
-                        enemy->projectiles[i].isParried = true;
-                        TraceLog(LOG_INFO, "Projectile parried!");
-                        return;
-                    }
+        // --- Collision with target entity ---
+        if (target != NULL && target->isAlive && target->damageCooldown <= 0.0f) {
+            if (CheckCollisionRecs(player->slashHitbox, target->hitbox)) {
+                target->health--;
+                target->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+
+                // --- Apply knockback depending on slash type ---
+                if (player->slashDirection == SLASH_FORWARD) {
+                    float knockDir = (target->hitbox.x < player->base.hitbox.x) ? -1.0f : 1.0f;
+                    target->velocity.x = knockDir * KNOCKBACK_FORCE_X;
+                    target->velocity.y = KNOCKBACK_FORCE_Y; // slight lift
+                } 
+                else if (player->slashDirection == SLASH_UP) {
+                    target->velocity.y = -KNOCKBACK_FORCE_Y;
+                    target->velocity.x = 0;
+                } 
+                else if (player->slashDirection == SLASH_DOWN) {
+                    target->velocity.y = KNOCKBACK_FORCE_Y;
+                    target->velocity.x = 0;
                 }
-            }
 
-            if (CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) {
-                enemy->health--;
-                enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+                // --- Player recoil (forward slashes only) ---
+                if (player->slashDirection == SLASH_FORWARD) {
+                    player->recoilTime = player->recoilDuration;
+                    float recoilDir = (player->base.hitbox.x < target->hitbox.x) ? -1.0f : 1.0f;
+                    player->recoilVelocityX = recoilDir * player->recoilStrength;
+                }
 
-                float knockDir = (enemy->base.hitbox.x < player->base.hitbox.x) ? -1.0f : 1.0f;
-                enemy->base.velocity.x = knockDir * KNOCKBACK_FORCE_X;
-                enemy->base.velocity.y = KNOCKBACK_FORCE_Y;
-
-                // --- Player recoil (time-based) ---
-                player->recoilTime = player->recoilDuration;
-                float recoilDir = (player->base.hitbox.x < enemy->base.hitbox.x) ? -1.0f : 1.0f;
-                player->recoilVelocityX = recoilDir * player->recoilStrength;
-
-                TraceLog(LOG_INFO, "Enemy slashed! Health: %d", enemy->health);
+                TraceLog(LOG_INFO, "Entity slashed! Health: %d", target->health);
 
                 // --- POGO if down slash ---
                 if (player->slashDirection == SLASH_DOWN) {
@@ -549,12 +544,60 @@ void handleSlash(Player *player, Enemy *enemy) {
                     player->hasDoubleJump = true;
                     TraceLog(LOG_INFO, "POGO triggered!");
                 }
+
+                // Kill entity if health is gone
+                if (target->health <= 0) {
+                    target->isAlive = false;
+                    TraceLog(LOG_INFO, "Entity defeated!");
+                }
             }
-            
         }
 
+        // --- End slash after duration ---
         if (player->slashTimer >= player->slashDuration) {
             player->isSlashing = false;
+        }
+    }
+}
+
+#include "phy.h"
+#include "raylib.h"
+#include <stdio.h> // for debug logging
+
+void handleParry(Player *player, EnemyProjectile *projectiles, int projectileCount, Entity *boss, Enemy *enemies, int enemyCount) {
+    if (!player->isSlashing) return; // only parry while slashing
+
+    for (int i = 0; i < projectileCount; i++) {
+        EnemyProjectile *p = &projectiles[i];
+        if (!p->active) continue;
+
+        // Check collision between player's slash and projectile
+        if (CheckCollisionRecs(player->slashHitbox, p->hitbox)) {
+            // Mark as parried
+            p->isParried = true;
+
+            // Reverse velocity at 2x speed
+            p->velocity.x = -p->velocity.x * 2.0f;
+            p->velocity.y = -p->velocity.y * 2.0f;
+
+            TraceLog(LOG_INFO, "Projectile parried! Reflected at 2x speed.");
+        }
+
+        // If projectile is parried, check if it hits boss or enemies
+        if (p->isParried) {
+            if (boss && CheckCollisionRecs(p->hitbox, boss->hitbox)) {
+                boss->health -= 3;
+                p->active = false;
+                TraceLog(LOG_INFO, "Boss hit by parry! Boss HP: %d", boss->health);
+            }
+
+            for (int j = 0; j < enemyCount; j++) {
+                if (enemies[j].active && CheckCollisionRecs(p->hitbox, enemies[j].base.hitbox)) {
+                    enemies[j].base.health -= 3;
+                    p->active = false;
+                    TraceLog(LOG_INFO, "Enemy hit by parry! Enemy HP: %d", enemies[j].base.health);
+                }
+            }
         }
     }
 }

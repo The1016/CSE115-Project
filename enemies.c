@@ -9,7 +9,7 @@
 #define chaser_walk_speed 3.0f
 #define chaser_run_speed 6.5f   
 #define vision_range 400.0f
-#define ENEMY_DAMAGE_COOLDOWN 0.5;
+#define ENEMY_DAMAGE_COOLDOWN 0.5f
 
 
 extern bool gatesOpen; // Global flag for gate state
@@ -71,9 +71,9 @@ void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount
     }
 
     // --- Update damage cooldown ---
-    if (enemy->damageCooldown > 0) {
-        enemy->damageCooldown -= dt;
-        if (enemy->damageCooldown < 0) enemy->damageCooldown = 0;
+    if (enemy->base.damageCooldown > 0) {
+        enemy->base.damageCooldown -= dt;
+        if (enemy->base.damageCooldown < 0) enemy->base.damageCooldown = 0;
     }
 
     // --- If boss is NOT awake yet ---
@@ -174,21 +174,13 @@ void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount
         handlePlayerCollisionDamage(player, &enemy->base, 2);
     }
 
-    // --- Boss taking damage from melee slash ---
-    if (enemy->damageCooldown <= 0.0f &&
-        player->isSlashing &&
-        CheckCollisionRecs(player->slashHitbox, enemy->base.hitbox)) 
-    {
-        enemy->health -= 1;
-        enemy->damageCooldown = ENEMY_DAMAGE_COOLDOWN;  // Prevent instant multi-hits
-        TraceLog(LOG_INFO, "Boss hit! Health: %d", enemy->health);
+        handleSlash(player, &enemy->base);
 
-        if (enemy->health <= 0) {
+        if (enemy->base.health <= 0) {
             enemy->base.isAlive = false;
             enemy->deathTimer = 0.0f;
             TraceLog(LOG_INFO, "Boss defeated!");
         }
-    }
 
     // --- Boss Name popup ---
     if (enemy->showName) {
@@ -216,8 +208,4 @@ void Boss1(boss1 *enemy, Player *player, Rectangle *platforms, int platformCount
         }
     }
 }
-
-
-
-
 

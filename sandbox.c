@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include "zones.h"
 
 
 #define focusOffsetY 200  // Distance above player to center camera
@@ -57,13 +56,37 @@ void sandBox() {
     Player player = {0};
     initializePlayer(&player, screenWidth, screenHeight);
 
-    Enemy enemy = {0};
+    Enemy enemy = {0}; // zero everything
     enemy.base.hitbox = (Rectangle){ player.base.hitbox.x - 200, player.base.hitbox.y, 35, 60 };
     enemy.base.velocity = (Vector2){ 0, 0 };
     enemy.base.onGround = false;
+    enemy.base.health = 5;
+    enemy.deathTimer = 0.0f;
+    enemy.attackCooldown = 0.0f;  
+    enemy.attackWindup = 0.0f;    
+    enemy.isCharging = false;     
+    enemy.base.damageCooldown = 0.0f;
+    enemy.base.isAlive = true;
 
-    float floorBottom = floor->y + floor->height;
-float cameraMinY = floorBottom - screenHeight / 2.0f;
+    chaser enemy1 = {0};
+    enemy1.spawnPos.x = screenWidth / 2;
+    enemy1.spawnPos.y = bossFloorTop ;
+    enemy1.base.hitbox = (Rectangle){enemy1.spawnPos.x, enemy1.spawnPos.y, 35, 60};
+    enemy1.base.velocity = (Vector2){0, 0};
+    enemy1.isChasing = false;
+    enemy1.patrolDirection = 1; 
+    enemy1.patrolDistance = 200;
+
+    boss1 Brute = {0};
+    Brute.spawnPos.x = screenWidth * 3;
+    Brute.spawnPos.y = bossFloorTop-60;   
+    Brute.base.hitbox = (Rectangle){Brute.spawnPos.x, Brute.spawnPos.y, 35, 60};
+    Brute.base.velocity = (Vector2){0, 0};
+    Brute.isCharging = false;
+    Brute.base.isAlive = true;
+    Brute.isAwake = false;  // Boss starts asleep
+    Brute.base.health = 10;
+    Brute.showName = false;
 
 
     // Use the global camera
@@ -71,14 +94,10 @@ float cameraMinY = floorBottom - screenHeight / 2.0f;
     camera->offset = (Vector2){ screenWidth / 2.0f, screenHeight / 2.0f };
     camera->zoom = 1.0f;
 
+    // Add bullet initialization after player init
     InitBullets(bullets, MAX_BULLETS);
 
     while (currentScreen == SCREEN_SANDBOX && !WindowShouldClose()) {
-        // Bench interaction
-        if (CheckCollisionRecs(player.base.hitbox, bench.hitbox) && IsKeyPressed(KEY_E)) {
-            bench.isActive = true;
-            TraceLog(LOG_INFO, "Checkpoint activated!");
-        }
         if (IsKeyPressed(KEY_ESCAPE)) {
         isPaused = !isPaused;
         }
@@ -108,21 +127,22 @@ float cameraMinY = floorBottom - screenHeight / 2.0f;
         platforms[i + 7] = smallPlatforms[i];
         }
 
-            // Movement
-            if (!player.isDashing && player.knkbackTime <= 0.0f) {
-                player.base.velocity.x = 0;
-                if (IsKeyDown(KEY_D)) { player.base.velocity.x += speed; player.facingDirection = 1; }
-                if (IsKeyDown(KEY_A)) { player.base.velocity.x -= speed; player.facingDirection = -1; }
-            }
-
-            // Shooting
-            if (IsKeyPressed(KEY_M)) {
-                Vector2 startPos = {
-                    player.base.hitbox.x + (player.facingDirection == 1 ? player.base.hitbox.width : 0),
-                    player.base.hitbox.y + player.base.hitbox.height / 2
-                };
-                ShootBullet(bullets, startPos, player.facingDirection);
-            }
+        // Movement
+        // Regular movement only if not dashing
+        if (!player.isDashing && player.knkbackTime <= 0.0f) {
+            // only clear & apply input movement if not currently in knockback
+            player.base.velocity.x = 0;
+            if (IsKeyDown(KEY_D)) player.base.velocity.x += speed;
+            if (IsKeyDown(KEY_A)) player.base.velocity.x -= speed;
+        }
+         if (IsKeyPressed(KEY_M)) {
+        Vector2 startPos = {
+        player.base.hitbox.x + player.base.hitbox.width,
+        player.base.hitbox.y + player.base.hitbox.height / 2
+        };
+        Vector2 dir = { 10, 0 };  // Move right at speed 10
+        ShootBullet(bullets, dir, player.facingDirection);
+        }
 
         // Apply movement
         player.base.hitbox.x += player.base.velocity.x;
@@ -130,7 +150,9 @@ float cameraMinY = floorBottom - screenHeight / 2.0f;
 
         // Physics
         updatePlayer(&player, &enemy, platforms);
-        updateEnemy(&enemy, &player, platforms, 1, speed - 2, 5.0f);
+        updateEnemy(&enemy, &player, platforms, SMALL_PLATFORM_COUNT + 1, speed - 2, 5.0f);
+        handleSlash(&player, &Brute.base);
+        handlePlayerCollisionDamage(&player, &enemy.base, 1);
 
         // Handle player–enemy collision
         
@@ -160,14 +182,21 @@ float cameraMinY = floorBottom - screenHeight / 2.0f;
         BeginDrawing();
         ClearBackground(DARKGRAY);
         BeginMode2D(*camera);  // Use pointer dereference
-
-       // Background elements based on current zone
-ClearBackground(zone->bgColor);
-DrawRectangleRec(zone->floor, BLACK);
-for (int i = 0; i < zone->platformCount; i++) {
-    DrawRectangleRec(zone->smallPlatforms[i], PURPLE);
-}
-
+        //Chasers(&enemy1, &player, platforms, SMALL_PLATFORM_COUNT + 1);
+        // Background elements
+        DrawRectangleRec(floor, BLACK);
+        DrawRectangleRec(bossFloor, RAYWHITE);
+        DrawRectangleRec(bossRoomL, RAYWHITE);
+        DrawRectangleRec(bossRoomR, RAYWHITE);
+        DrawRectangleRec(celling, RAYWHITE);
+        if(!gatesOpen){
+            DrawRectangleRec(Lgate, RED);
+            DrawRectangleRec(Rgate, RED);
+        }
+        Boss1(&Brute, &player, platforms, SMALL_PLATFORM_COUNT + 6);
+        for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
+            DrawRectangleRec(smallPlatforms[i], PURPLE);
+        }
 
         // Game elements
         DrawBullets(bullets, MAX_BULLETS);  // Draw bullets before player
@@ -181,10 +210,11 @@ for (int i = 0; i < zone->platformCount; i++) {
             DrawRectangleRec(player.base.hitbox, RAYWHITE);
         }
 
-            if (player.isSlashing) {
-                float alpha = 1.0f - (player.slashTimer / player.slashDuration);
-                DrawRectangleRec(player.slashHitbox, Fade(YELLOW, alpha));
-            }
+        // Slash effect
+        if (player.isSlashing) {
+            float alpha = 1.0f - (player.slashTimer / player.slashDuration);
+            DrawRectangleRec(player.slashHitbox, Fade(YELLOW, alpha));
+        }
 
         // Enemy and projectiles
         if (!enemy.base.isAlive) {
@@ -206,10 +236,14 @@ for (int i = 0; i < zone->platformCount; i++) {
             DrawRectangleRec(enemy.base.hitbox, RED);
         }
 
-            for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
-                if (enemy.projectiles[i].active) {
-                    DrawRectangleRec(enemy.projectiles[i].hitbox, ORANGE);
-                    if (debugMode) DrawRectangleLinesEx(enemy.projectiles[i].hitbox, 1, RED);
+        // Draw enemy projectiles
+        for (int i = 0; i < MAX_ENEMY_PROJECTILES; i++) {
+            if (enemy.projectiles[i].active) {
+                DrawRectangleRec(enemy.projectiles[i].hitbox, ORANGE);
+                
+                // Draw projectile outline in debug mode
+                if (debugMode) {
+                    DrawRectangleLinesEx(enemy.projectiles[i].hitbox, 1, RED);
                 }
             }
         }
@@ -235,7 +269,8 @@ for (int i = 0; i < zone->platformCount; i++) {
         // Debug overlays
         if (debugMode) {
             DrawRectangleLines(player.base.hitbox.x, player.base.hitbox.y, player.base.hitbox.width, player.base.hitbox.height, BLUE);
-            DrawRectangleLines(floor->x, floor->y, floor->width, floor->height, GREEN);
+            DrawRectangleLines(floor.x, floor.y, floor.width, floor.height, GREEN);
+            DrawRectangleLines(bossFloor.x, bossFloor.y, bossFloor.width, bossFloor.height, GREEN);
             DrawRectangleLines(enemy.base.hitbox.x, enemy.base.hitbox.y, enemy.base.hitbox.width, enemy.base.hitbox.height, ORANGE);
             for (int i = 0; i < SMALL_PLATFORM_COUNT; i++) {
             DrawRectangleLines(smallPlatforms[i].x, smallPlatforms[i].y, smallPlatforms[i].width, smallPlatforms[i].height, GREEN);
@@ -257,12 +292,16 @@ for (int i = 0; i < zone->platformCount; i++) {
             currentScreen = SCREEN_MAIN_MENU; // After 2s fade
             TraceLog(LOG_INFO, "Player death animation done - returning to main menu");
         }
-
+            }
+        EndMode2D();
+        if (isPaused) {
+        ingameMenu();
+        }
         EndMode2D();
 
 // --- UI elements ---
 for (int i = 0; i < player.maxHealth; i++) {
-    Color heartColor = (i < player.health) ? RED : DARKGRAY;
+    Color heartColor = (i < player.base.health) ? RED : DARKGRAY;
     DrawRectangle(20 + i * 40, 20, 30, 30, heartColor);
 }
 

@@ -17,6 +17,8 @@ typedef struct  {
     Vector2 velocity;   
     bool onGround;  
     bool isAlive; // Flag to check if the entity is alive
+    int health;
+    float damageCooldown;
 } Entity;
 typedef struct {
     Entity base; // Inherit from Entity
@@ -28,10 +30,8 @@ typedef struct {
     float dashTime;
     float dashCooldown;
     int dashDirection;  
-    float iFrames;
     float knkbackTime;
     float maxHealth;
-    float health;
     float deathTimer;
     bool isAlive;
     bool isSlashing;
@@ -59,7 +59,6 @@ typedef struct {
     Entity base;
     bool active;
     float speed;
-    int health;
     int direction;
     float aiTimer;
     bool attacking;  // 👈 ADD THIS
@@ -68,7 +67,6 @@ typedef struct {
     bool isCharging;       // Visual indicator state
     float deathTimer; 
     EnemyProjectile projectiles[MAX_ENEMY_PROJECTILES];
-    float damageCooldown;
 } Enemy;
 
 
@@ -77,7 +75,7 @@ typedef struct {
 
 void handleJump(Player *entity);
 void handleDash(Player *entity);
-void handleSlash(Player *player, Enemy *enemy);
+void handleSlash(Player *player, Entity *target);
 
 // Player and general object logic
 void applyGravity(Entity *entity, float gravity,float gravityscale);
@@ -91,5 +89,6 @@ void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platfor
 // Add after other function declarations
 void initializePlayer(Player *player, float screenWidth, float screenHeight);
 Camera2D* getGameCamera(void);  // Function to access the camera
+
 
 #endif

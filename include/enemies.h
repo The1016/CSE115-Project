@@ -20,11 +20,9 @@ typedef struct {
     float attackWindup; // Time spent charging the attack
     bool isCharging;   
     float deathTimer; // Timer for death animation
-    float health; // Boss health
     bool isAwake;
     bool showName; 
     float nameTimer;
-    float damageCooldown;
 } boss1;
 
 void Chasers(chaser *enemy, Player *player, Rectangle *platforms, int platformCount);

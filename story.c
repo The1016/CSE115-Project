@@ -109,7 +109,7 @@ void storyMode() {
                 player.base.hitbox.y + player.base.hitbox.height / 2
             };
             Vector2 dir = {10, 0};
-            ShootBullet(bullets, startPos, dir);
+
         }
 
         // Apply movement and bounds
@@ -163,7 +163,7 @@ void storyMode() {
 
         // UI
         for (int i = 0; i < player.maxHealth; i++) {
-            DrawRectangle(20 + i * 40, 20, 30, 30, (i < player.health) ? RED : DARKGRAY);
+            DrawRectangle(20 + i * 40, 20, 30, 30, (i < player.base.health) ? RED : DARKGRAY);
         }
 
         EndDrawing();

@@ -1,0 +1,3 @@
+Run this command in CMD 
+gcc *.c -Iinclude -Llib -lraylib -lopengl32 -lgdi32 -lwinmm -o game.exe
+Make sure ur in the corret folder when you run this command.
