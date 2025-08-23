@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <math.h>
 
+#define DARKRED  (Color){139, 0, 0, 255} 
 
 #define focusOffsetY 200  // Distance above player to center camera
 
@@ -55,6 +56,10 @@ void sandBox() {
 
     Player player = {0};
     initializePlayer(&player, screenWidth, screenHeight);
+    Vector2 respawnPoint = {
+        player.base.hitbox.x,
+        player.base.hitbox.y
+    };
 
     Enemy enemy = {0}; // zero everything
     enemy.base.hitbox = (Rectangle){ player.base.hitbox.x - 200, player.base.hitbox.y, 35, 60 };
@@ -152,7 +157,9 @@ void sandBox() {
         updatePlayer(&player, &enemy, platforms);
         updateEnemy(&enemy, &player, platforms, SMALL_PLATFORM_COUNT + 1, speed - 2, 5.0f);
         handleSlash(&player, &Brute.base);
+        handleHealing(&player);
         handlePlayerCollisionDamage(&player, &enemy.base, 1);
+
 
         // Handle player–enemy collision
         
@@ -164,6 +171,17 @@ void sandBox() {
         if (player.knkbackTime > 0) {
             player.knkbackTime -= GetFrameTime();
         }
+        if (player.base.hitbox.y > floorBottom + 200) {
+                player.base.health -= 1; // Take 1 damage
+                if (player.base.health > 0) {
+                    // Respawn at checkpoint
+                    player.base.hitbox.x = respawnPoint.x;
+                    player.base.hitbox.y = respawnPoint.y;
+                    player.base.velocity = (Vector2){0, 0};
+                } else {
+                    player.isAlive = false;
+                }
+            }
 
         // Update bullet positions
         UpdateBullets(bullets, MAX_BULLETS);
@@ -189,6 +207,9 @@ void sandBox() {
 
         camera->target = cameraTarget;
 
+        if(!Brute.base.isAlive){
+            gatesOpen = true;
+        }
 
         // Drawing - reorganized for proper order
         BeginDrawing();
@@ -212,15 +233,49 @@ void sandBox() {
 
         // Game elements
         DrawBullets(bullets, MAX_BULLETS);  // Draw bullets before player
-        
-        // Player
-        if (!player.isAlive) {
-            float alpha = 1.0f - (player.deathTimer / 2.0f);
-            if (alpha < 0) alpha = 0;
-            DrawRectangleRec(player.base.hitbox, Fade(RAYWHITE, alpha));
-        } else {
-            DrawRectangleRec(player.base.hitbox, RAYWHITE);
-        }
+
+// --- Player Drawing ---
+if (player.isAlive) {
+    Color playerColor = RAYWHITE;
+
+    // If damage cooldown (IFrames) is active → flicker
+    if (player.base.damageCooldown > 0.0f) {
+        float t = GetTime() * 18.0f;  // speed of flicker
+        float alpha = (sinf(t) > 0) ? 0.3f : 1.0f;  
+        playerColor.a = (unsigned char)(alpha * 255); 
+    }
+
+    DrawRectangleRec(player.base.hitbox, playerColor);
+
+    // Healing effect (only if alive)
+    if (player.isHealing) {
+        float centerX = player.base.hitbox.x + player.base.hitbox.width / 2.0f;
+        float centerY = player.base.hitbox.y + player.base.hitbox.height / 2.0f;
+
+        float pulse = 5.0f * sinf(GetTime() * 10); 
+        DrawCircle(centerX, centerY, 30 + pulse, (Color){255, 255, 200, 100});
+        DrawCircle(centerX, centerY, 20, (Color){255, 255, 150, 150});
+    }
+}
+
+else {
+    // Player is dead → draw death animation
+    float deathDuration = 2.0f;  // same as in updatePlayer()
+    float alpha = 1.0f - (player.deathTimer / deathDuration);
+    if (alpha < 0) alpha = 0;
+
+    // Fading out body
+    DrawRectangleRec(player.base.hitbox, Fade(RED, alpha));
+
+    // Optional: add a glow or shrinking effect for flair
+    float shrink = player.base.hitbox.width * (1.0f - (player.deathTimer / deathDuration) * 0.5f);
+    DrawCircle(player.base.hitbox.x + player.base.hitbox.width / 2.0f,
+               player.base.hitbox.y + player.base.hitbox.height / 2.0f,
+               shrink, Fade(DARKRED, alpha));
+}
+
+
+
 
         // Slash effect
         if (player.isSlashing) {
@@ -311,10 +366,24 @@ void sandBox() {
         }
         EndMode2D();
 
-// --- UI elements ---
+// --- Flask (big circle) ---
+int flaskX = 60;
+int flaskY = 60;
+int flaskRadius = 45;
+
+float fillRatio = player.mana / player.maxMana;
+Color flaskColor = (fillRatio > 0.0f) ? SKYBLUE : DARKGRAY;
+
+// Draw filled part (mana progress)
+DrawCircleSector((Vector2){flaskX, flaskY}, flaskRadius, 0, fillRatio * 360, 0, flaskColor);
+
+// Outline
+DrawCircleLines(flaskX, flaskY, flaskRadius, BLACK);
+
+// --- Hearts ---
 for (int i = 0; i < player.maxHealth; i++) {
     Color heartColor = (i < player.base.health) ? RED : DARKGRAY;
-    DrawRectangle(20 + i * 40, 20, 30, 30, heartColor);
+    DrawRectangle(flaskX + flaskRadius + 20 + i * 40, flaskY - 20, 30, 30, heartColor);
 }
 
 // --- Boss name popup ---

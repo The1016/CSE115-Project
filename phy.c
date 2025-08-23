@@ -13,7 +13,7 @@
 #define DASH_COOLDOWN 0.4f
 #define KNOCKBACK_FORCE_X 0.0f   // Horizontal push speed
 #define KNOCKBACK_FORCE_Y 0.0f // Upward bounce (negative = up)
-#define IFRAME_TIME 0.5f  // seconds
+#define IFRAME_TIME 1.0f  // seconds
 #define SLASH_DURATION 0.15f    // Increased from 0.2f to 0.3f
 #define SLASH_WIDTH_MULT 1.8f  // Slash width multiplier
 #define SLASH_HEIGHT_DIV 3.0f  // Slash height divider
@@ -53,11 +53,18 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     player->base.onGround = false;
 
     // Health system
-    player->maxHealth = 3;
+    player->maxHealth = 5;
     player->base.health = player->maxHealth;
     player->isAlive = true;
     player->deathTimer = 0.0f;
     player->base.damageCooldown = 0.0f;
+    player->maxFlaskCharges = 3;  
+    player->flaskCharges = 0;
+    player->maxMana = 100.0f;
+    player->mana = 0.0f;
+    player->isHealing = false;
+    player->healTimer = 0.0f;
+    player->healDuration = 1.5f; 
 
     // Movement system
     player->isJumping = false;
@@ -69,6 +76,7 @@ void initializePlayer(Player *player, float screenWidth, float screenHeight) {
     player->dashCooldown = 0.0f;
     player->dashDirection = 1;
     player->knkbackTime = 0.0f;
+    player->respawnPoint = (Vector2){ screenWidth / 2.0f - 25,screenHeight / 2.0f - 25,  }; // example coordinates
 
     // Combat system
     player->isSlashing = false;
@@ -330,10 +338,28 @@ void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms) {
         return;
     }
 
-    if (!player->isAlive) {
-        player->deathTimer += dt;
-        return;
+    // If player is dead, update death timer
+if (!player->isAlive) {
+    player->deathTimer += GetFrameTime();
+
+    // Duration of death animation (e.g., 2 seconds)
+    float deathDuration = 2.0f;
+
+    if (player->deathTimer >= deathDuration) {
+        // Respawn player after animation
+        player->isAlive = true;
+        player->base.health = player->maxHealth;
+        player->mana = 0; // optional
+        player->base.hitbox.x = player->respawnPoint.x;
+        player->base.hitbox.y = player->respawnPoint.y;
+        player->deathTimer = 0.0f;
+
+        TraceLog(LOG_INFO, "Player respawned at checkpoint");
     }
+
+    // Skip the rest of update while dead
+    return;
+}
 
     // Update timers
     if (player->base.damageCooldown > 0.0f) player->base.damageCooldown -= dt;
@@ -512,6 +538,11 @@ void handleSlash(Player *player, Entity *target) {
             if (CheckCollisionRecs(player->slashHitbox, target->hitbox)) {
                 target->health--;
                 target->damageCooldown = ENEMY_DAMAGE_COOLDOWN;
+                if (player->mana < player->maxMana) {
+                    player->mana += 12.0f; // gain 12 mana per hit
+                    if (player->mana > player->maxMana) player->mana = player->maxMana;
+                    TraceLog(LOG_INFO, "Mana gained! Current Mana: %.2f", player->mana);
+                }
 
                 // --- Apply knockback depending on slash type ---
                 if (player->slashDirection == SLASH_FORWARD) {
@@ -560,9 +591,36 @@ void handleSlash(Player *player, Entity *target) {
     }
 }
 
-#include "phy.h"
-#include "raylib.h"
-#include <stdio.h> // for debug logging
+void handleHealing(Player *player) {
+    // Start healing if key is held and enough mana
+    if (IsKeyDown(KEY_E) && player->mana >= 33.0f && player->base.health < player->maxHealth) {
+        player->isHealing = true;
+        player->healTimer += GetFrameTime();
+
+        // If held for full duration
+        if (player->healTimer >= player->healDuration) {
+            player->base.health += 1;
+            if (player->base.health > player->maxHealth) {
+                player->base.health = player->maxHealth;
+            }
+            player->mana -= 33.0f;
+            TraceLog(LOG_INFO, "Player healed! Current HP: %d | Mana left: %.2f", player->base.health, player->mana);
+
+            player->healTimer = 0.0f;
+            player->isHealing = false; // done healing
+        }
+    } else {
+        // Cancel healing if key released early
+        if (player->isHealing && !IsKeyDown(KEY_E)) {
+            TraceLog(LOG_INFO, "Healing interrupted!");
+        }
+        player->healTimer = 0.0f;
+        player->isHealing = false;
+    }
+}
+
+
+
 
 void handleParry(Player *player, EnemyProjectile *projectiles, int projectileCount, Entity *boss, Enemy *enemies, int enemyCount) {
     if (!player->isSlashing) return; // only parry while slashing

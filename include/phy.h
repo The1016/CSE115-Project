@@ -32,6 +32,13 @@ typedef struct {
     int dashDirection;  
     float knkbackTime;
     float maxHealth;
+    bool isHealing;
+    float healTimer;      // how long player has been holding heal
+    float healDuration;   // required time to finish heal
+    int flaskCharges;     // how many heals left
+    int maxFlaskCharges;  // max flask charges
+    float mana;           // current mana
+    float maxMana;        // required to heal once
     float deathTimer;
     bool isAlive;
     bool isSlashing;
@@ -48,7 +55,9 @@ typedef struct {
     float recoilDuration;
     float recoilStrength;
     float recoilVelocityX; 
+    Vector2 respawnPoint; 
 } Player;
+
 typedef struct {
     Rectangle hitbox;
     Vector2 velocity;
@@ -82,6 +91,7 @@ void applyGravity(Entity *entity, float gravity,float gravityscale);
 void updateEntity(Entity *player, Rectangle *floor, int platformCount,float ignoreHorizontalCollision);
 void updatePlayer(Player *player, Enemy *enemy, Rectangle *platforms);
 void handlePlayerCollisionDamage(Player *player, Entity *enemyEntity, int damage);
+void handleHealing(Player *player);
 
 // Enemy-specific logic
 void updateEnemy(Enemy *enemy, Player *player, Rectangle *platforms, int platformCount, float chaseSpeed, float chaseThreshold);
