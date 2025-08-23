@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include "music.h"
 
 #define DARKRED  (Color){139, 0, 0, 255} 
 
@@ -25,6 +26,7 @@ Bullet bullets[MAX_BULLETS];
 extern GameScreen currentScreen;  // Declare external variable
 
 void sandBox() {
+    InitSandboxMusic();
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
 
@@ -106,6 +108,9 @@ void sandBox() {
         if (IsKeyPressed(KEY_ESCAPE)) {
         isPaused = !isPaused;
         }
+        if(!isPaused){
+            UpdateSandboxMusic();
+            }
 
         if (IsKeyPressed(KEY_F1)) {
             debugMode = !debugMode;
@@ -416,7 +421,7 @@ if (Brute.showName) {
 
         EndDrawing();
     }
-
+    StopSandboxMusic();
     // Add cleanup at end of function
     free(smallPlatforms);
 }
